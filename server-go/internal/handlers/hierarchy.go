@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"open-clickup-server/internal/db"
+	"open-clickup-server/internal/dto"
 	"open-clickup-server/internal/service"
 )
 
@@ -31,16 +32,16 @@ type CreateSpaceReq struct {
 func (h *HierarchyHandler) CreateSpace(c *fiber.Ctx) error {
 	var req CreateSpaceReq
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+		return sendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "name is required"})
+		return sendError(c, fiber.StatusBadRequest, "name is required")
 	}
 
 	ws, err := h.q.GetFirstWorkspace(c.Context())
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "No workspace found"})
+		return sendError(c, fiber.StatusNotFound, "No workspace found")
 	}
 
 	color := "#7b68ee"
@@ -58,7 +59,7 @@ func (h *HierarchyHandler) CreateSpace(c *fiber.Ctx) error {
 		Position:    1000,
 	})
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(space)
@@ -68,7 +69,7 @@ func (h *HierarchyHandler) UpdateSpace(c *fiber.Ctx) error {
 	spaceID := c.Params("spaceId")
 	var req CreateSpaceReq
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+		return sendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
 	space, err := h.q.UpdateSpace(c.Context(), db.UpdateSpaceParams{
@@ -78,7 +79,7 @@ func (h *HierarchyHandler) UpdateSpace(c *fiber.Ctx) error {
 		Icon:  pgtype.Text{String: *req.Icon, Valid: req.Icon != nil},
 	})
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Space not found"})
+		return sendError(c, fiber.StatusNotFound, "Space not found")
 	}
 
 	return c.JSON(space)
@@ -87,9 +88,9 @@ func (h *HierarchyHandler) UpdateSpace(c *fiber.Ctx) error {
 func (h *HierarchyHandler) DeleteSpace(c *fiber.Ctx) error {
 	spaceID := c.Params("spaceId")
 	if err := h.q.DeleteSpace(c.Context(), spaceID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
-	return c.JSON(fiber.Map{"ok": true})
+	return c.JSON(dto.OKResponse{OK: true})
 }
 
 // ---------------- Folders ----------------
@@ -102,11 +103,11 @@ type CreateFolderReq struct {
 func (h *HierarchyHandler) CreateFolder(c *fiber.Ctx) error {
 	var req CreateFolderReq
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+		return sendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" || req.SpaceID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "name and spaceId are required"})
+		return sendError(c, fiber.StatusBadRequest, "name and spaceId are required")
 	}
 
 	folder, err := h.q.CreateFolder(c.Context(), db.CreateFolderParams{
@@ -117,7 +118,7 @@ func (h *HierarchyHandler) CreateFolder(c *fiber.Ctx) error {
 		Collapsed: false,
 	})
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(folder)
@@ -129,7 +130,7 @@ func (h *HierarchyHandler) UpdateFolder(c *fiber.Ctx) error {
 		Name string `json:"name"`
 	}
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+		return sendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
 	folder, err := h.q.UpdateFolder(c.Context(), db.UpdateFolderParams{
@@ -137,7 +138,7 @@ func (h *HierarchyHandler) UpdateFolder(c *fiber.Ctx) error {
 		Name: req.Name,
 	})
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Folder not found"})
+		return sendError(c, fiber.StatusNotFound, "Folder not found")
 	}
 
 	return c.JSON(folder)
@@ -146,9 +147,9 @@ func (h *HierarchyHandler) UpdateFolder(c *fiber.Ctx) error {
 func (h *HierarchyHandler) DeleteFolder(c *fiber.Ctx) error {
 	folderID := c.Params("folderId")
 	if err := h.q.DeleteFolder(c.Context(), folderID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
-	return c.JSON(fiber.Map{"ok": true})
+	return c.JSON(dto.OKResponse{OK: true})
 }
 
 // ---------------- Lists ----------------
@@ -162,16 +163,16 @@ type CreateListReq struct {
 func (h *HierarchyHandler) CreateList(c *fiber.Ctx) error {
 	var req CreateListReq
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+		return sendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" || req.SpaceID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "name and spaceId are required"})
+		return sendError(c, fiber.StatusBadRequest, "name and spaceId are required")
 	}
 
 	list, err := service.CreateListWithDefaults(c.Context(), h.pool, req.SpaceID, req.FolderID, req.Name)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(list)
@@ -183,30 +184,20 @@ func (h *HierarchyHandler) GetList(c *fiber.Ctx) error {
 
 	l, err := h.q.GetListByID(ctx, listID)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "List not found"})
+		return sendError(c, fiber.StatusNotFound, "List not found")
 	}
 
 	statuses, _ := h.q.ListStatusesByList(ctx, listID)
 	views, _ := h.q.ListViewsByList(ctx, listID)
 	tasksRows, _ := h.q.ListTasksByList(ctx, listID)
 
-	type StatusItem struct {
-		ID       string  `json:"id"`
-		ListID   string  `json:"listId"`
-		Name     string  `json:"name"`
-		Color    string  `json:"color"`
-		Type     string  `json:"type"`
-		Position float64 `json:"position"`
-		WipLimit *int32  `json:"wipLimit"`
-	}
-
-	statusList := make([]StatusItem, len(statuses))
+	statusList := make([]dto.StatusResponse, len(statuses))
 	for i, s := range statuses {
 		var wip *int32
 		if s.WipLimit.Valid {
 			wip = &s.WipLimit.Int32
 		}
-		statusList[i] = StatusItem{
+		statusList[i] = dto.StatusResponse{
 			ID:       s.ID,
 			ListID:   s.ListId,
 			Name:     s.Name,
@@ -217,18 +208,9 @@ func (h *HierarchyHandler) GetList(c *fiber.Ctx) error {
 		}
 	}
 
-	type ViewItem struct {
-		ID       string      `json:"id"`
-		ListID   string      `json:"listId"`
-		Name     string      `json:"name"`
-		Type     string      `json:"type"`
-		Position float64     `json:"position"`
-		Config   interface{} `json:"config"`
-	}
-
-	viewList := make([]ViewItem, len(views))
+	viewList := make([]dto.ViewResponse, len(views))
 	for i, v := range views {
-		viewList[i] = ViewItem{
+		viewList[i] = dto.ViewResponse{
 			ID:       v.ID,
 			ListID:   v.ListId,
 			Name:     v.Name,
@@ -238,74 +220,50 @@ func (h *HierarchyHandler) GetList(c *fiber.Ctx) error {
 		}
 	}
 
-	type TaskItem struct {
-		ID           string        `json:"id"`
-		ListID       string        `json:"listId"`
-		StatusID     string        `json:"statusId"`
-		ParentID     *string       `json:"parentId"`
-		Name         string        `json:"name"`
-		Description  *string       `json:"description"`
-		Priority     *string       `json:"priority"`
-		Position     float64       `json:"position"`
-		StartDate    *string       `json:"startDate"`
-		DueDate      *string       `json:"dueDate"`
-		TimeEstimate *int32        `json:"timeEstimate"`
-		CreatedByID  *string       `json:"createdById"`
-		CreatedAt    string        `json:"createdAt"`
-		UpdatedAt    string        `json:"updatedAt"`
-		CompletedAt  *string       `json:"completedAt"`
-		Archived     bool          `json:"archived"`
-		Recurrence   *string       `json:"recurrence"`
-		Status       interface{}   `json:"status"`
-		Assignees    []interface{} `json:"assignees"`
-		Tags         []interface{} `json:"tags"`
-		Subtasks     []interface{} `json:"subtasks"`
-		Count        interface{}   `json:"_count"`
-	}
-
-	taskList := make([]TaskItem, len(tasksRows))
+	taskList := make([]dto.TaskResponse, len(tasksRows))
 	for i, t := range tasksRows {
 		assignees, _ := h.q.ListTaskAssignees(ctx, t.ID)
-		assigneeList := make([]interface{}, len(assignees))
+		assigneeList := make([]dto.TaskAssigneeResponse, len(assignees))
 		for ai, a := range assignees {
-			assigneeList[ai] = fiber.Map{
-				"userId": a.UserId,
-				"user": fiber.Map{
-					"id":        a.UserId,
-					"name":      a.UserName,
-					"email":     a.UserEmail,
-					"color":     a.UserColor,
-					"avatarUrl": textOrNil(a.UserAvatarUrl),
+			assigneeList[ai] = dto.TaskAssigneeResponse{
+				UserID: a.UserId,
+				User: dto.UserResponse{
+					ID:        a.UserId,
+					Name:      a.UserName,
+					Email:     a.UserEmail,
+					Color:     a.UserColor,
+					AvatarURL: textOrNil(a.UserAvatarUrl),
 				},
 			}
 		}
 
 		tags, _ := h.q.ListTaskTags(ctx, t.ID)
-		tagList := make([]interface{}, len(tags))
+		tagList := make([]dto.TaskTagResponse, len(tags))
 		for ti, tg := range tags {
-			tagList[ti] = fiber.Map{
-				"tagId": tg.TagId,
-				"tag": fiber.Map{
-					"id":    tg.TagId,
-					"name":  tg.TagName,
-					"color": tg.TagColor,
+			tagList[ti] = dto.TaskTagResponse{
+				TagID: tg.TagId,
+				Tag: dto.TagMetaResponse{
+					ID:    tg.TagId,
+					Name:  tg.TagName,
+					Color: tg.TagColor,
 				},
 			}
 		}
 
 		subtasks, _ := h.q.ListSubtasksByParent(ctx, pgtype.Text{String: t.ID, Valid: true})
-		subtaskList := make([]interface{}, len(subtasks))
+		subtaskList := make([]dto.SubtaskResponse, len(subtasks))
 		for si, sub := range subtasks {
-			subtaskList[si] = fiber.Map{
-				"id":       sub.ID,
-				"name":     sub.Name,
-				"statusId": sub.StatusId,
-				"position": sub.Position,
-				"status": fiber.Map{
-					"id":    sub.StatusId,
-					"name":  sub.StatusName,
-					"color": sub.StatusColor,
-					"type":  string(sub.StatusType),
+			subtaskList[si] = dto.SubtaskResponse{
+				ID:       sub.ID,
+				Name:     sub.Name,
+				StatusID: sub.StatusId,
+				Position: sub.Position,
+				Status: dto.StatusResponse{
+					ID:       sub.StatusId,
+					Name:     sub.StatusName,
+					Color:    sub.StatusColor,
+					Type:     string(sub.StatusType),
+					Position: 0,
 				},
 			}
 		}
@@ -335,7 +293,7 @@ func (h *HierarchyHandler) GetList(c *fiber.Ctx) error {
 			est = &t.TimeEstimate.Int32
 		}
 
-		taskList[i] = TaskItem{
+		taskList[i] = dto.TaskResponse{
 			ID:           t.ID,
 			ListID:       t.ListId,
 			StatusID:     t.StatusId,
@@ -353,56 +311,59 @@ func (h *HierarchyHandler) GetList(c *fiber.Ctx) error {
 			CompletedAt:  compStr,
 			Archived:     t.Archived,
 			Recurrence:   textOrNil(t.Recurrence),
-			Status: fiber.Map{
-				"id":    t.StatusId,
-				"name":  t.StatusName,
-				"color": t.StatusColor,
-				"type":  string(t.StatusType),
+			Status: dto.StatusResponse{
+				ID:       t.StatusId,
+				ListID:   t.ListId,
+				Name:     t.StatusName,
+				Color:    t.StatusColor,
+				Type:     string(t.StatusType),
+				Position: 0,
 			},
-			Assignees: assigneeList,
-			Tags:      tagList,
-			Subtasks:  subtaskList,
-			Count: fiber.Map{
-				"comments":   t.CommentCount,
-				"checklists": t.ChecklistCount,
-				"subtasks":   t.SubtaskCount,
+			Assignees:         assigneeList,
+			Tags:              tagList,
+			Subtasks:          subtaskList,
+			CustomFieldValues: []interface{}{},
+			Count: dto.TaskCount{
+				Comments:   int(t.CommentCount),
+				Checklists: int(t.ChecklistCount),
+				Subtasks:   int(t.SubtaskCount),
 			},
 		}
 	}
 
-	var folderJSON interface{} = nil
+	var folderJSON *dto.FolderMetaResponse = nil
 	if l.FolderId.Valid {
-		folderJSON = fiber.Map{
-			"id":   l.FolderId.String,
-			"name": l.FolderName.String,
+		folderJSON = &dto.FolderMetaResponse{
+			ID:   l.FolderId.String,
+			Name: l.FolderName.String,
 		}
 	}
 
-	resList := fiber.Map{
-		"id":           l.ID,
-		"spaceId":      l.SpaceId,
-		"folderId":     textOrNil(l.FolderId),
-		"name":         l.Name,
-		"color":        textOrNil(l.Color),
-		"icon":         textOrNil(l.Icon),
-		"position":     l.Position,
-		"createdAt":    l.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
-		"space": fiber.Map{
-			"id":    l.SpaceId,
-			"name":  l.SpaceName,
-			"color": l.SpaceColor,
-			"icon":  textOrNil(l.SpaceIcon),
+	resList := dto.ListWithRelationsResponse{
+		ID:        l.ID,
+		SpaceID:   l.SpaceId,
+		FolderID:  textOrNil(l.FolderId),
+		Name:      l.Name,
+		Color:     textOrNil(l.Color),
+		Icon:      textOrNil(l.Icon),
+		Position:  l.Position,
+		CreatedAt: l.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+		Space: dto.SpaceMetaResponse{
+			ID:    l.SpaceId,
+			Name:  l.SpaceName,
+			Color: l.SpaceColor,
+			Icon:  textOrNil(l.SpaceIcon),
 		},
-		"folder":       folderJSON,
-		"statuses":     statusList,
-		"views":        viewList,
-		"customFields": []interface{}{},
+		Folder:       folderJSON,
+		Statuses:     statusList,
+		Views:        viewList,
+		CustomFields: []interface{}{},
 	}
 
-	return c.JSON(fiber.Map{
-		"list":         resList,
-		"tasks":        taskList,
-		"dependencies": []interface{}{},
+	return c.JSON(dto.ListDetailResponse{
+		List:         resList,
+		Tasks:        taskList,
+		Dependencies: []dto.TaskDependencyResponse{},
 	})
 }
 
@@ -413,16 +374,16 @@ func (h *HierarchyHandler) UpdateList(c *fiber.Ctx) error {
 		Color *string `json:"color"`
 	}
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+		return sendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
 	list, err := h.q.UpdateList(c.Context(), db.UpdateListParams{
 		ID:    listID,
 		Name:  req.Name,
-		Color: pgtype.Text{String: *req.Color, Valid: req.Color != nil},
+		Color: stringPtrToText(req.Color),
 	})
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "List not found"})
+		return sendError(c, fiber.StatusNotFound, "List not found")
 	}
 
 	return c.JSON(list)
@@ -431,12 +392,10 @@ func (h *HierarchyHandler) UpdateList(c *fiber.Ctx) error {
 func (h *HierarchyHandler) DeleteList(c *fiber.Ctx) error {
 	listID := c.Params("listId")
 	if err := h.q.DeleteList(c.Context(), listID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
-	return c.JSON(fiber.Map{"ok": true})
+	return c.JSON(dto.OKResponse{OK: true})
 }
-
-// ---------------- Favorites ----------------
 
 func (h *HierarchyHandler) ToggleFavorite(c *fiber.Ctx) error {
 	user := c.Locals("user").(*db.GetSessionWithUserRow)
@@ -458,7 +417,7 @@ func (h *HierarchyHandler) ToggleFavorite(c *fiber.Ctx) error {
 			UserId: user.UserId,
 			ListId: listID,
 		})
-		return c.JSON(fiber.Map{"favorited": false})
+		return c.JSON(dto.FavoriteToggleResponse{Favorited: false})
 	}
 
 	_, _ = h.q.AddFavorite(ctx, db.AddFavoriteParams{
@@ -466,5 +425,5 @@ func (h *HierarchyHandler) ToggleFavorite(c *fiber.Ctx) error {
 		UserId: user.UserId,
 		ListId: listID,
 	})
-	return c.JSON(fiber.Map{"favorited": true})
+	return c.JSON(dto.FavoriteToggleResponse{Favorited: true})
 }

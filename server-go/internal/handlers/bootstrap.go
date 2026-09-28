@@ -80,18 +80,24 @@ type WorkspaceTreeJSON struct {
 	Spaces    []SpaceNodeJSON `json:"spaces"`
 }
 
+type BootstrapResponse struct {
+	CurrentUser UserJSON          `json:"currentUser"`
+	Workspace   WorkspaceTreeJSON `json:"workspace"`
+	Favorites   []string          `json:"favorites"`
+}
+
 func (h *BootstrapHandler) GetBootstrap(c *fiber.Ctx) error {
 	user := c.Locals("user").(*db.GetSessionWithUserRow)
 	ctx := c.Context()
 
 	ws, err := h.q.GetFirstWorkspace(ctx)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "No workspace found"})
+		return sendError(c, fiber.StatusNotFound, "No workspace found")
 	}
 
 	membersRows, err := h.q.ListWorkspaceMembers(ctx, ws.ID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 
 	members := make([]MemberJSON, len(membersRows))
@@ -115,7 +121,7 @@ func (h *BootstrapHandler) GetBootstrap(c *fiber.Ctx) error {
 	// Build spaces tree
 	spacesRows, err := h.q.ListSpacesByWorkspace(ctx, ws.ID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 
 	spaces := make([]SpaceNodeJSON, len(spacesRows))
@@ -192,15 +198,15 @@ func (h *BootstrapHandler) GetBootstrap(c *fiber.Ctx) error {
 		favs = []string{}
 	}
 
-	return c.JSON(fiber.Map{
-		"currentUser": UserJSON{
+	return c.JSON(BootstrapResponse{
+		CurrentUser: UserJSON{
 			ID:        user.UserId,
 			Name:      user.UserName,
 			Email:     user.UserEmail,
 			Color:     user.UserColor,
 			AvatarUrl: textOrNil(user.UserAvatarUrl),
 		},
-		"workspace": wsTree,
-		"favorites": favs,
+		Workspace: wsTree,
+		Favorites: favs,
 	})
 }

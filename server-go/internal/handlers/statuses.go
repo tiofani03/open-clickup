@@ -5,6 +5,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"open-clickup-server/internal/db"
+	"open-clickup-server/internal/dto"
 )
 
 type StatusesHandler struct {
@@ -27,7 +28,7 @@ func (h *StatusesHandler) UpdateStatus(c *fiber.Ctx) error {
 	statusID := c.Params("statusId")
 	var req UpdateStatusReq
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+		return sendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
 	var st db.StatusType
@@ -52,16 +53,29 @@ func (h *StatusesHandler) UpdateStatus(c *fiber.Ctx) error {
 		WipLimit: wip,
 	})
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Status not found"})
+		return sendError(c, fiber.StatusNotFound, "Status not found")
 	}
 
-	return c.JSON(status)
+	var wipInt *int32
+	if status.WipLimit.Valid {
+		wipInt = &status.WipLimit.Int32
+	}
+
+	return c.JSON(dto.StatusResponse{
+		ID:       status.ID,
+		ListID:   status.ListId,
+		Name:     status.Name,
+		Color:    status.Color,
+		Type:     string(status.Type),
+		Position: status.Position,
+		WipLimit: wipInt,
+	})
 }
 
 func (h *StatusesHandler) DeleteStatus(c *fiber.Ctx) error {
 	statusID := c.Params("statusId")
 	if err := h.q.DeleteStatus(c.Context(), statusID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
-	return c.JSON(fiber.Map{"ok": true})
+	return c.JSON(dto.OKResponse{OK: true})
 }

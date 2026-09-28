@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"open-clickup-server/internal/db"
+	"open-clickup-server/internal/dto"
 	"open-clickup-server/internal/realtime"
 )
 
@@ -36,53 +37,54 @@ type CreateTaskReq struct {
 	Assignees    []string `json:"assigneeIds"`
 }
 
-func (h *TasksHandler) getFormattedTask(ctx context.Context, taskID string) (fiber.Map, error) {
+func (h *TasksHandler) getFormattedTask(ctx context.Context, taskID string) (dto.TaskResponse, error) {
 	task, err := h.q.GetTaskByID(ctx, taskID)
 	if err != nil {
-		return nil, err
+		return dto.TaskResponse{}, err
 	}
 
 	assignees, _ := h.q.ListTaskAssignees(ctx, taskID)
-	assigneeList := make([]interface{}, len(assignees))
+	assigneeList := make([]dto.TaskAssigneeResponse, len(assignees))
 	for ai, a := range assignees {
-		assigneeList[ai] = fiber.Map{
-			"userId": a.UserId,
-			"user": fiber.Map{
-				"id":        a.UserId,
-				"name":      a.UserName,
-				"email":     a.UserEmail,
-				"color":     a.UserColor,
-				"avatarUrl": textOrNil(a.UserAvatarUrl),
+		assigneeList[ai] = dto.TaskAssigneeResponse{
+			UserID: a.UserId,
+			User: dto.UserResponse{
+				ID:        a.UserId,
+				Name:      a.UserName,
+				Email:     a.UserEmail,
+				Color:     a.UserColor,
+				AvatarURL: textOrNil(a.UserAvatarUrl),
 			},
 		}
 	}
 
 	tags, _ := h.q.ListTaskTags(ctx, taskID)
-	tagList := make([]interface{}, len(tags))
+	tagList := make([]dto.TaskTagResponse, len(tags))
 	for ti, tg := range tags {
-		tagList[ti] = fiber.Map{
-			"tagId": tg.TagId,
-			"tag": fiber.Map{
-				"id":    tg.TagId,
-				"name":  tg.TagName,
-				"color": tg.TagColor,
+		tagList[ti] = dto.TaskTagResponse{
+			TagID: tg.TagId,
+			Tag: dto.TagMetaResponse{
+				ID:    tg.TagId,
+				Name:  tg.TagName,
+				Color: tg.TagColor,
 			},
 		}
 	}
 
 	subtasks, _ := h.q.ListSubtasksByParent(ctx, pgtype.Text{String: taskID, Valid: true})
-	subtaskList := make([]interface{}, len(subtasks))
+	subtaskList := make([]dto.SubtaskResponse, len(subtasks))
 	for si, sub := range subtasks {
-		subtaskList[si] = fiber.Map{
-			"id":       sub.ID,
-			"name":     sub.Name,
-			"statusId": sub.StatusId,
-			"position": sub.Position,
-			"status": fiber.Map{
-				"id":    sub.StatusId,
-				"name":  sub.StatusName,
-				"color": sub.StatusColor,
-				"type":  string(sub.StatusType),
+		subtaskList[si] = dto.SubtaskResponse{
+			ID:       sub.ID,
+			Name:     sub.Name,
+			StatusID: sub.StatusId,
+			Position: sub.Position,
+			Status: dto.StatusResponse{
+				ID:       sub.StatusId,
+				Name:     sub.StatusName,
+				Color:    sub.StatusColor,
+				Type:     string(sub.StatusType),
+				Position: 0,
 			},
 		}
 	}
@@ -112,40 +114,40 @@ func (h *TasksHandler) getFormattedTask(ctx context.Context, taskID string) (fib
 		est = &task.TimeEstimate.Int32
 	}
 
-	return fiber.Map{
-		"id":           task.ID,
-		"listId":       task.ListId,
-		"statusId":     task.StatusId,
-		"parentId":     textOrNil(task.ParentId),
-		"name":         task.Name,
-		"description":  textOrNil(task.Description),
-		"priority":     priority,
-		"position":     task.Position,
-		"startDate":    startStr,
-		"dueDate":      dueStr,
-		"timeEstimate": est,
-		"createdById":  textOrNil(task.CreatedById),
-		"createdAt":    task.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
-		"updatedAt":    task.UpdatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
-		"completedAt":  compStr,
-		"archived":     task.Archived,
-		"recurrence":   textOrNil(task.Recurrence),
-		"status": fiber.Map{
-			"id":       task.StatusId,
-			"listId":   task.ListId,
-			"name":     task.StatusName,
-			"color":    task.StatusColor,
-			"type":     string(task.StatusType),
-			"position": 0,
+	return dto.TaskResponse{
+		ID:           task.ID,
+		ListID:       task.ListId,
+		StatusID:     task.StatusId,
+		ParentID:     textOrNil(task.ParentId),
+		Name:         task.Name,
+		Description:  textOrNil(task.Description),
+		Priority:     priority,
+		Position:     task.Position,
+		StartDate:    startStr,
+		DueDate:      dueStr,
+		TimeEstimate: est,
+		CreatedByID:  textOrNil(task.CreatedById),
+		CreatedAt:    task.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+		UpdatedAt:    task.UpdatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+		CompletedAt:  compStr,
+		Archived:     task.Archived,
+		Recurrence:   textOrNil(task.Recurrence),
+		Status: dto.StatusResponse{
+			ID:       task.StatusId,
+			ListID:   task.ListId,
+			Name:     task.StatusName,
+			Color:    task.StatusColor,
+			Type:     string(task.StatusType),
+			Position: 0,
 		},
-		"assignees":         assigneeList,
-		"tags":              tagList,
-		"subtasks":          subtaskList,
-		"customFieldValues": []interface{}{},
-		"_count": fiber.Map{
-			"comments":   0,
-			"checklists": 0,
-			"subtasks":   len(subtaskList),
+		Assignees:         assigneeList,
+		Tags:              tagList,
+		Subtasks:          subtaskList,
+		CustomFieldValues: []interface{}{},
+		Count: dto.TaskCount{
+			Comments:   0,
+			Checklists: 0,
+			Subtasks:   len(subtaskList),
 		},
 	}, nil
 }
@@ -154,12 +156,12 @@ func (h *TasksHandler) CreateTask(c *fiber.Ctx) error {
 	user := c.Locals("user").(*db.GetSessionWithUserRow)
 	var req CreateTaskReq
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+		return sendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" || req.ListID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "name and listId are required"})
+		return sendError(c, fiber.StatusBadRequest, "name and listId are required")
 	}
 
 	ctx := c.Context()
@@ -168,7 +170,7 @@ func (h *TasksHandler) CreateTask(c *fiber.Ctx) error {
 	if req.StatusID == "" {
 		statuses, err := h.q.ListStatusesByList(ctx, req.ListID)
 		if err != nil || len(statuses) == 0 {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "List has no statuses"})
+			return sendError(c, fiber.StatusBadRequest, "List has no statuses")
 		}
 		req.StatusID = statuses[0].ID
 	}
@@ -222,7 +224,7 @@ func (h *TasksHandler) CreateTask(c *fiber.Ctx) error {
 		Recurrence:   pgtype.Text{Valid: false},
 	})
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 
 	// Add assignees
@@ -260,201 +262,107 @@ func (h *TasksHandler) GetTask(c *fiber.Ctx) error {
 
 	task, err := h.q.GetTaskByID(ctx, taskID)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Task not found"})
+		return sendError(c, fiber.StatusNotFound, "Task not found")
 	}
 
-	assignees, _ := h.q.ListTaskAssignees(ctx, taskID)
-	assigneeList := make([]interface{}, len(assignees))
-	for ai, a := range assignees {
-		assigneeList[ai] = fiber.Map{
-			"userId": a.UserId,
-			"user": fiber.Map{
-				"id":        a.UserId,
-				"name":      a.UserName,
-				"email":     a.UserEmail,
-				"color":     a.UserColor,
-				"avatarUrl": textOrNil(a.UserAvatarUrl),
-			},
-		}
-	}
-
-	tags, _ := h.q.ListTaskTags(ctx, taskID)
-	tagList := make([]interface{}, len(tags))
-	for ti, tg := range tags {
-		tagList[ti] = fiber.Map{
-			"tagId": tg.TagId,
-			"tag": fiber.Map{
-				"id":    tg.TagId,
-				"name":  tg.TagName,
-				"color": tg.TagColor,
-			},
-		}
-	}
-
-	subtasks, _ := h.q.ListSubtasksByParent(ctx, pgtype.Text{String: taskID, Valid: true})
-	subtaskList := make([]interface{}, len(subtasks))
-	for si, sub := range subtasks {
-		subtaskList[si] = fiber.Map{
-			"id":       sub.ID,
-			"name":     sub.Name,
-			"statusId": sub.StatusId,
-			"position": sub.Position,
-			"status": fiber.Map{
-				"id":    sub.StatusId,
-				"name":  sub.StatusName,
-				"color": sub.StatusColor,
-				"type":  string(sub.StatusType),
-			},
-		}
+	formatted, err := h.getFormattedTask(ctx, taskID)
+	if err != nil {
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 
 	checklists, _ := h.q.ListChecklistsByTask(ctx, taskID)
-	checklistList := make([]interface{}, len(checklists))
+	checklistList := make([]dto.ChecklistResponse, len(checklists))
 	for ci, ch := range checklists {
 		items, _ := h.q.ListChecklistItems(ctx, ch.ID)
-		itemList := make([]interface{}, len(items))
+		itemList := make([]dto.ChecklistItemResponse, len(items))
 		for ii, it := range items {
-			itemList[ii] = fiber.Map{
-				"id":          it.ID,
-				"checklistId": it.ChecklistId,
-				"name":        it.Name,
-				"resolved":    it.Resolved,
-				"position":    it.Position,
+			itemList[ii] = dto.ChecklistItemResponse{
+				ID:          it.ID,
+				ChecklistID: it.ChecklistId,
+				Name:        it.Name,
+				Resolved:    it.Resolved,
+				Position:    it.Position,
 			}
 		}
-		checklistList[ci] = fiber.Map{
-			"id":       ch.ID,
-			"name":     ch.Name,
-			"position": ch.Position,
-			"items":    itemList,
+		checklistList[ci] = dto.ChecklistResponse{
+			ID:       ch.ID,
+			TaskID:   ch.TaskId,
+			Name:     ch.Name,
+			Position: ch.Position,
+			Items:    itemList,
 		}
 	}
 
 	comments, _ := h.q.ListCommentsByTask(ctx, taskID)
-	commentList := make([]interface{}, len(comments))
+	commentList := make([]dto.CommentResponse, len(comments))
 	for ci, cm := range comments {
 		reactions, _ := h.q.ListReactionsByComment(ctx, cm.ID)
-		reactionList := make([]interface{}, len(reactions))
+		reactionList := make([]dto.CommentReactionResponse, len(reactions))
 		for ri, r := range reactions {
-			reactionList[ri] = fiber.Map{
-				"id":        r.ID,
-				"commentId": r.CommentId,
-				"userId":    r.UserId,
-				"emoji":     r.Emoji,
-				"user":      fiber.Map{"name": r.UserName},
+			reactionList[ri] = dto.CommentReactionResponse{
+				ID:        r.ID,
+				CommentID: r.CommentId,
+				UserID:    r.UserId,
+				Emoji:     r.Emoji,
+				User:      dto.ReactionUserMeta{Name: r.UserName},
 			}
 		}
-		commentList[ci] = fiber.Map{
-			"id":        cm.ID,
-			"taskId":    cm.TaskId,
-			"userId":    cm.UserId,
-			"body":      cm.Body,
-			"parentId":  textOrNil(cm.ParentId),
-			"resolved":  cm.Resolved,
-			"createdAt": cm.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
-			"updatedAt": cm.UpdatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
-			"user": fiber.Map{
-				"id":        cm.UserId,
-				"name":      cm.UserName,
-				"email":     cm.UserEmail,
-				"color":     cm.UserColor,
-				"avatarUrl": textOrNil(cm.UserAvatarUrl),
+		commentList[ci] = dto.CommentResponse{
+			ID:        cm.ID,
+			TaskID:    cm.TaskId,
+			UserID:    cm.UserId,
+			Body:      cm.Body,
+			ParentID:  textOrNil(cm.ParentId),
+			Resolved:  cm.Resolved,
+			CreatedAt: cm.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+			UpdatedAt: cm.UpdatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+			User: dto.UserResponse{
+				ID:        cm.UserId,
+				Name:      cm.UserName,
+				Email:     cm.UserEmail,
+				Color:     cm.UserColor,
+				AvatarURL: textOrNil(cm.UserAvatarUrl),
 			},
-			"reactions": reactionList,
+			Reactions: reactionList,
 		}
 	}
 
 	activities, _ := h.q.ListActivitiesByTask(ctx, taskID)
-	activityList := make([]interface{}, len(activities))
+	activityList := make([]dto.TaskActivityResponse, len(activities))
 	for ai, a := range activities {
 		var actData interface{}
 		_ = json.Unmarshal(a.Data, &actData)
-		activityList[ai] = fiber.Map{
-			"id":        a.ID,
-			"taskId":    a.TaskId,
-			"userId":    a.UserId,
-			"type":      a.Type,
-			"data":      actData,
-			"createdAt": a.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
-			"user": fiber.Map{
-				"name":      a.UserName,
-				"color":     a.UserColor,
-				"avatarUrl": textOrNil(a.UserAvatarUrl),
+		activityList[ai] = dto.TaskActivityResponse{
+			ID:        a.ID,
+			TaskID:    a.TaskId,
+			UserID:    textOrNil(a.UserId),
+			Type:      a.Type,
+			Data:      actData,
+			CreatedAt: a.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+			User: dto.ActivityUserMeta{
+				Name:      a.UserName,
+				Color:     a.UserColor,
+				AvatarURL: textOrNil(a.UserAvatarUrl),
 			},
 		}
 	}
 
-	var priority *string
-	if task.Priority.Valid {
-		pStr := string(task.Priority.Priority)
-		priority = &pStr
-	}
+	formatted.Count.Comments = len(commentList)
+	formatted.Count.Checklists = len(checklistList)
 
-	var startStr, dueStr, compStr *string
-	if task.StartDate.Valid {
-		s := task.StartDate.Time.Format("2006-01-02T15:04:05.000Z")
-		startStr = &s
-	}
-	if task.DueDate.Valid {
-		s := task.DueDate.Time.Format("2006-01-02T15:04:05.000Z")
-		dueStr = &s
-	}
-	if task.CompletedAt.Valid {
-		s := task.CompletedAt.Time.Format("2006-01-02T15:04:05.000Z")
-		compStr = &s
-	}
-
-	var est *int32
-	if task.TimeEstimate.Valid {
-		est = &task.TimeEstimate.Int32
-	}
-
-	return c.JSON(fiber.Map{
-		"id":           task.ID,
-		"listId":       task.ListId,
-		"statusId":     task.StatusId,
-		"parentId":     textOrNil(task.ParentId),
-		"name":         task.Name,
-		"description":  textOrNil(task.Description),
-		"priority":     priority,
-		"position":     task.Position,
-		"startDate":    startStr,
-		"dueDate":      dueStr,
-		"timeEstimate": est,
-		"createdById":  textOrNil(task.CreatedById),
-		"createdAt":    task.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
-		"updatedAt":    task.UpdatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
-		"completedAt":  compStr,
-		"archived":     task.Archived,
-		"recurrence":   textOrNil(task.Recurrence),
-		"status": fiber.Map{
-			"id":       task.StatusId,
-			"listId":   task.ListId,
-			"name":     task.StatusName,
-			"color":    task.StatusColor,
-			"type":     string(task.StatusType),
-			"position": 0,
+	return c.JSON(dto.TaskDetailResponse{
+		TaskResponse: formatted,
+		List: dto.TaskListMetaResponse{
+			ID:   task.ListId,
+			Name: task.ListName,
 		},
-		"list": fiber.Map{
-			"id":   task.ListId,
-			"name": task.ListName,
+		Space: dto.SpaceMetaResponse{
+			ID:   task.SpaceID,
+			Name: task.SpaceName,
 		},
-		"space": fiber.Map{
-			"id":   task.SpaceID,
-			"name": task.SpaceName,
-		},
-		"assignees":         assigneeList,
-		"tags":              tagList,
-		"subtasks":          subtaskList,
-		"checklists":        checklistList,
-		"comments":          commentList,
-		"activities":        activityList,
-		"customFieldValues": []interface{}{},
-		"_count": fiber.Map{
-			"comments":   len(commentList),
-			"checklists": len(checklistList),
-			"subtasks":   len(subtaskList),
-		},
+		Checklists: checklistList,
+		Comments:   commentList,
+		Activities: activityList,
 	})
 }
 
@@ -480,12 +388,12 @@ func (h *TasksHandler) UpdateTask(c *fiber.Ctx) error {
 
 	var req UpdateTaskReq
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+		return sendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
 	existing, err := h.q.GetTaskByID(ctx, taskID)
 	if err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Task not found"})
+		return sendError(c, fiber.StatusNotFound, "Task not found")
 	}
 
 	name := existing.Name
@@ -603,7 +511,7 @@ func (h *TasksHandler) UpdateTask(c *fiber.Ctx) error {
 		Recurrence:   rec,
 	})
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 
 	// Assignees full replacement if provided
@@ -653,7 +561,7 @@ func (h *TasksHandler) DeleteTask(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.JSON(fiber.Map{"ok": true})
+	return c.JSON(dto.OKResponse{OK: true})
 }
 
 // ---------------- Bulk Operations ----------------
@@ -671,11 +579,11 @@ type BulkTasksReq struct {
 func (h *TasksHandler) BulkTasks(c *fiber.Ctx) error {
 	var req BulkTasksReq
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+		return sendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
 	if len(req.IDs) == 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "ids are required"})
+		return sendError(c, fiber.StatusBadRequest, "ids are required")
 	}
 
 	ctx := c.Context()
@@ -733,5 +641,6 @@ func (h *TasksHandler) BulkTasks(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.JSON(fiber.Map{"ok": true, "count": len(req.IDs)})
+	count := len(req.IDs)
+	return c.JSON(dto.OKResponse{OK: true, Count: &count})
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"open-clickup-server/internal/db"
+	"open-clickup-server/internal/dto"
 	"open-clickup-server/internal/realtime"
 )
 
@@ -19,12 +20,14 @@ func NewChecklistsHandler(pool *pgxpool.Pool, q *db.Queries) *ChecklistsHandler 
 	return &ChecklistsHandler{pool: pool, q: q}
 }
 
+type CreateChecklistReq struct {
+	Name *string `json:"name"`
+}
+
 func (h *ChecklistsHandler) CreateChecklist(c *fiber.Ctx) error {
 	taskID := c.Params("taskId")
 	ctx := c.Context()
-	var req struct {
-		Name *string `json:"name"`
-	}
+	var req CreateChecklistReq
 	_ = c.BodyParser(&req)
 
 	name := "Checklist"
@@ -43,7 +46,7 @@ func (h *ChecklistsHandler) CreateChecklist(c *fiber.Ctx) error {
 		Position: lastPos + 1000,
 	})
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 
 	task, err := h.q.GetTaskByID(ctx, taskID)
@@ -54,24 +57,26 @@ func (h *ChecklistsHandler) CreateChecklist(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"id":       checklist.ID,
-		"taskId":   checklist.TaskId,
-		"name":     checklist.Name,
-		"position": checklist.Position,
-		"items":    []interface{}{},
+	return c.Status(fiber.StatusCreated).JSON(dto.ChecklistResponse{
+		ID:       checklist.ID,
+		TaskID:   checklist.TaskId,
+		Name:     checklist.Name,
+		Position: checklist.Position,
+		Items:    []dto.ChecklistItemResponse{},
 	})
+}
+
+type UpdateChecklistReq struct {
+	Name     *string  `json:"name"`
+	Position *float64 `json:"position"`
 }
 
 func (h *ChecklistsHandler) UpdateChecklist(c *fiber.Ctx) error {
 	checklistID := c.Params("checklistId")
 	ctx := c.Context()
-	var req struct {
-		Name     *string  `json:"name"`
-		Position *float64 `json:"position"`
-	}
+	var req UpdateChecklistReq
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+		return sendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
 	var curName string
@@ -79,7 +84,7 @@ func (h *ChecklistsHandler) UpdateChecklist(c *fiber.Ctx) error {
 	var taskID string
 	row := h.pool.QueryRow(ctx, `SELECT name, position, "taskId" FROM "Checklist" WHERE id = $1`, checklistID)
 	if err := row.Scan(&curName, &curPos, &taskID); err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Checklist not found"})
+		return sendError(c, fiber.StatusNotFound, "Checklist not found")
 	}
 
 	if req.Name != nil && strings.TrimSpace(*req.Name) != "" {
@@ -95,7 +100,7 @@ func (h *ChecklistsHandler) UpdateChecklist(c *fiber.Ctx) error {
 		Position: curPos,
 	})
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 
 	task, err := h.q.GetTaskByID(ctx, taskID)
@@ -106,7 +111,26 @@ func (h *ChecklistsHandler) UpdateChecklist(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.JSON(cl)
+	// Fetch items
+	itemsRows, _ := h.q.ListChecklistItems(ctx, cl.ID)
+	items := make([]dto.ChecklistItemResponse, len(itemsRows))
+	for i, item := range itemsRows {
+		items[i] = dto.ChecklistItemResponse{
+			ID:          item.ID,
+			ChecklistID: item.ChecklistId,
+			Name:        item.Name,
+			Resolved:    item.Resolved,
+			Position:    item.Position,
+		}
+	}
+
+	return c.JSON(dto.ChecklistResponse{
+		ID:       cl.ID,
+		TaskID:   cl.TaskId,
+		Name:     cl.Name,
+		Position: cl.Position,
+		Items:    items,
+	})
 }
 
 func (h *ChecklistsHandler) DeleteChecklist(c *fiber.Ctx) error {
@@ -118,7 +142,7 @@ func (h *ChecklistsHandler) DeleteChecklist(c *fiber.Ctx) error {
 	_ = row.Scan(&taskID)
 
 	if err := h.q.DeleteChecklist(ctx, checklistID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 
 	if taskID != "" {
@@ -131,23 +155,25 @@ func (h *ChecklistsHandler) DeleteChecklist(c *fiber.Ctx) error {
 		}
 	}
 
-	return c.JSON(fiber.Map{"ok": true})
+	return c.JSON(dto.OKResponse{OK: true})
 }
 
 // ---------------- Checklist Items ----------------
 
+type CreateItemReq struct {
+	Name string `json:"name"`
+}
+
 func (h *ChecklistsHandler) CreateItem(c *fiber.Ctx) error {
 	checklistID := c.Params("checklistId")
 	ctx := c.Context()
-	var req struct {
-		Name string `json:"name"`
-	}
+	var req CreateItemReq
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+		return sendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "name is required"})
+		return sendError(c, fiber.StatusBadRequest, "name is required")
 	}
 
 	var lastPos float64
@@ -166,7 +192,7 @@ func (h *ChecklistsHandler) CreateItem(c *fiber.Ctx) error {
 		Position:    lastPos + 1000,
 	})
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 
 	if taskID != "" {
@@ -179,19 +205,27 @@ func (h *ChecklistsHandler) CreateItem(c *fiber.Ctx) error {
 		}
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(item)
+	return c.Status(fiber.StatusCreated).JSON(dto.ChecklistItemResponse{
+		ID:          item.ID,
+		ChecklistID: item.ChecklistId,
+		Name:        item.Name,
+		Resolved:    item.Resolved,
+		Position:    item.Position,
+	})
+}
+
+type UpdateItemReq struct {
+	Name     *string  `json:"name"`
+	Resolved *bool    `json:"resolved"`
+	Position *float64 `json:"position"`
 }
 
 func (h *ChecklistsHandler) UpdateItem(c *fiber.Ctx) error {
 	itemID := c.Params("itemId")
 	ctx := c.Context()
-	var req struct {
-		Name     *string  `json:"name"`
-		Resolved *bool    `json:"resolved"`
-		Position *float64 `json:"position"`
-	}
+	var req UpdateItemReq
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+		return sendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
 	var curName string
@@ -200,7 +234,7 @@ func (h *ChecklistsHandler) UpdateItem(c *fiber.Ctx) error {
 	var checklistID string
 	row := h.pool.QueryRow(ctx, `SELECT name, resolved, position, "checklistId" FROM "ChecklistItem" WHERE id = $1`, itemID)
 	if err := row.Scan(&curName, &curResolved, &curPos, &checklistID); err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Checklist item not found"})
+		return sendError(c, fiber.StatusNotFound, "Checklist item not found")
 	}
 
 	if req.Name != nil && strings.TrimSpace(*req.Name) != "" {
@@ -220,7 +254,7 @@ func (h *ChecklistsHandler) UpdateItem(c *fiber.Ctx) error {
 		Position: curPos,
 	})
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 
 	var taskID string
@@ -236,7 +270,13 @@ func (h *ChecklistsHandler) UpdateItem(c *fiber.Ctx) error {
 		}
 	}
 
-	return c.JSON(item)
+	return c.JSON(dto.ChecklistItemResponse{
+		ID:          item.ID,
+		ChecklistID: item.ChecklistId,
+		Name:        item.Name,
+		Resolved:    item.Resolved,
+		Position:    item.Position,
+	})
 }
 
 func (h *ChecklistsHandler) DeleteItem(c *fiber.Ctx) error {
@@ -248,7 +288,7 @@ func (h *ChecklistsHandler) DeleteItem(c *fiber.Ctx) error {
 	_ = row.Scan(&checklistID)
 
 	if err := h.q.DeleteChecklistItem(ctx, itemID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 
 	if checklistID != "" {
@@ -266,5 +306,5 @@ func (h *ChecklistsHandler) DeleteItem(c *fiber.Ctx) error {
 		}
 	}
 
-	return c.JSON(fiber.Map{"ok": true})
+	return c.JSON(dto.OKResponse{OK: true})
 }

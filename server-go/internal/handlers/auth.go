@@ -4,30 +4,12 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"open-clickup-server/internal/auth"
 	"open-clickup-server/internal/db"
+	"open-clickup-server/internal/dto"
 )
-
-func cuid() string {
-	return "c" + uuid.New().String()[:24]
-}
-
-func textOrNil(t pgtype.Text) *string {
-	if t.Valid {
-		return &t.String
-	}
-	return nil
-}
-
-func stringPtrToText(s *string) pgtype.Text {
-	if s != nil {
-		return pgtype.Text{String: *s, Valid: true}
-	}
-	return pgtype.Text{Valid: false}
-}
 
 type AuthHandler struct {
 	q *db.Queries
@@ -45,29 +27,29 @@ type LoginRequest struct {
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	var req LoginRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+		return sendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
 	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 	if req.Email == "" || req.Password == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Email and password are required"})
+		return sendError(c, fiber.StatusBadRequest, "Email and password are required")
 	}
 
 	user, err := h.q.GetUserByEmail(c.Context(), req.Email)
 	if err != nil || !user.PasswordHash.Valid || !auth.VerifyPassword(req.Password, user.PasswordHash.String) {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid email or password"})
+		return sendError(c, fiber.StatusUnauthorized, "Invalid email or password")
 	}
 
 	if _, err := auth.CreateSession(c, h.q, user.ID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create session"})
+		return sendError(c, fiber.StatusInternalServerError, "Failed to create session")
 	}
 
-	return c.JSON(fiber.Map{
-		"id":        user.ID,
-		"email":     user.Email,
-		"name":      user.Name,
-		"color":     user.Color,
-		"avatarUrl": textOrNil(user.AvatarUrl),
+	return c.JSON(dto.UserResponse{
+		ID:        user.ID,
+		Email:     user.Email,
+		Name:      user.Name,
+		Color:     user.Color,
+		AvatarURL: textOrNil(user.AvatarUrl),
 	})
 }
 
@@ -80,28 +62,28 @@ type SignupRequest struct {
 func (h *AuthHandler) Signup(c *fiber.Ctx) error {
 	var req SignupRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+		return sendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
 	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Email == "" || req.Password == "" || req.Name == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Email, password, and name are required"})
+		return sendError(c, fiber.StatusBadRequest, "Email, password, and name are required")
 	}
 
 	if len(req.Password) < 6 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Password must be at least 6 characters"})
+		return sendError(c, fiber.StatusBadRequest, "Password must be at least 6 characters")
 	}
 
 	// Check if already exists
 	_, err := h.q.GetUserByEmail(c.Context(), req.Email)
 	if err == nil {
-		return c.Status(fiber.StatusConflict).JSON(fiber.Map{"error": "An account with this email already exists"})
+		return sendError(c, fiber.StatusConflict, "An account with this email already exists")
 	}
 
 	pwHash, err := auth.HashPassword(req.Password)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to hash password"})
+		return sendError(c, fiber.StatusInternalServerError, "Failed to hash password")
 	}
 
 	userID := cuid()
@@ -113,7 +95,7 @@ func (h *AuthHandler) Signup(c *fiber.Ctx) error {
 		PasswordHash: pgtype.Text{String: pwHash, Valid: true},
 	})
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create user"})
+		return sendError(c, fiber.StatusInternalServerError, "Failed to create user")
 	}
 
 	// Add to default workspace
@@ -128,30 +110,30 @@ func (h *AuthHandler) Signup(c *fiber.Ctx) error {
 	}
 
 	if _, err := auth.CreateSession(c, h.q, user.ID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to create session"})
+		return sendError(c, fiber.StatusInternalServerError, "Failed to create session")
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"id":        user.ID,
-		"email":     user.Email,
-		"name":      user.Name,
-		"color":     user.Color,
-		"avatarUrl": user.AvatarUrl,
+	return c.Status(fiber.StatusCreated).JSON(dto.UserResponse{
+		ID:        user.ID,
+		Email:     user.Email,
+		Name:      user.Name,
+		Color:     user.Color,
+		AvatarURL: textOrNil(user.AvatarUrl),
 	})
 }
 
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	_ = auth.DestroySession(c, h.q)
-	return c.JSON(fiber.Map{"ok": true})
+	return c.JSON(dto.OKResponse{OK: true})
 }
 
 func (h *AuthHandler) Me(c *fiber.Ctx) error {
 	user := c.Locals("user").(*db.GetSessionWithUserRow)
-	return c.JSON(fiber.Map{
-		"id":        user.UserId,
-		"email":     user.UserEmail,
-		"name":      user.UserName,
-		"color":     user.UserColor,
-		"avatarUrl": user.UserAvatarUrl,
+	return c.JSON(dto.UserResponse{
+		ID:        user.UserId,
+		Email:     user.UserEmail,
+		Name:      user.UserName,
+		Color:     user.UserColor,
+		AvatarURL: textOrNil(user.UserAvatarUrl),
 	})
 }

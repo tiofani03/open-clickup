@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"open-clickup-server/internal/db"
+	"open-clickup-server/internal/dto"
 	"open-clickup-server/internal/realtime"
 )
 
@@ -32,11 +33,11 @@ func (h *CommentsHandler) CreateComment(c *fiber.Ctx) error {
 
 	var req CreateCommentReq
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+		return sendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 	req.Body = strings.TrimSpace(req.Body)
 	if req.Body == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "body is required"})
+		return sendError(c, fiber.StatusBadRequest, "body is required")
 	}
 
 	comment, err := h.q.CreateComment(ctx, db.CreateCommentParams{
@@ -47,7 +48,7 @@ func (h *CommentsHandler) CreateComment(c *fiber.Ctx) error {
 		ParentId: stringPtrToText(req.ParentID),
 	})
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 
 	// Create activity
@@ -67,44 +68,47 @@ func (h *CommentsHandler) CreateComment(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"id":        comment.ID,
-		"taskId":    comment.TaskId,
-		"userId":    comment.UserId,
-		"body":      comment.Body,
-		"parentId":  textOrNil(comment.ParentId),
-		"resolved":  comment.Resolved,
-		"createdAt": comment.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
-		"updatedAt": comment.UpdatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
-		"user": fiber.Map{
-			"id":        user.UserId,
-			"name":      user.UserName,
-			"email":     user.UserEmail,
-			"color":     user.UserColor,
-			"avatarUrl": textOrNil(user.UserAvatarUrl),
+	return c.Status(fiber.StatusCreated).JSON(dto.CommentResponse{
+		ID:        comment.ID,
+		TaskID:    comment.TaskId,
+		UserID:    comment.UserId,
+		Body:      comment.Body,
+		ParentID:  textOrNil(comment.ParentId),
+		Resolved:  comment.Resolved,
+		CreatedAt: comment.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+		UpdatedAt: comment.UpdatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+		User: dto.UserResponse{
+			ID:        user.UserId,
+			Name:      user.UserName,
+			Email:     user.UserEmail,
+			Color:     user.UserColor,
+			AvatarURL: textOrNil(user.UserAvatarUrl),
 		},
-		"reactions": []interface{}{},
+		Reactions: []dto.CommentReactionResponse{},
 	})
+}
+
+type UpdateCommentReq struct {
+	Body     *string `json:"body"`
+	Resolved *bool   `json:"resolved"`
 }
 
 func (h *CommentsHandler) UpdateComment(c *fiber.Ctx) error {
 	commentID := c.Params("commentId")
 	ctx := c.Context()
 
-	var req struct {
-		Body     *string `json:"body"`
-		Resolved *bool   `json:"resolved"`
-	}
+	var req UpdateCommentReq
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+		return sendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
 	var curBody string
 	var curResolved bool
 	var taskID string
-	row := h.pool.QueryRow(ctx, `SELECT body, resolved, "taskId" FROM "Comment" WHERE id = $1`, commentID)
-	if err := row.Scan(&curBody, &curResolved, &taskID); err != nil {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Comment not found"})
+	var userID string
+	row := h.pool.QueryRow(ctx, `SELECT body, resolved, "taskId", "userId" FROM "Comment" WHERE id = $1`, commentID)
+	if err := row.Scan(&curBody, &curResolved, &taskID, &userID); err != nil {
+		return sendError(c, fiber.StatusNotFound, "Comment not found")
 	}
 
 	if req.Body != nil && strings.TrimSpace(*req.Body) != "" {
@@ -120,7 +124,7 @@ func (h *CommentsHandler) UpdateComment(c *fiber.Ctx) error {
 		Resolved: curResolved,
 	})
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 
 	task, err := h.q.GetTaskByID(ctx, taskID)
@@ -131,7 +135,27 @@ func (h *CommentsHandler) UpdateComment(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.JSON(comment)
+	// Fetch author details
+	u, _ := h.q.GetUserByID(ctx, userID)
+
+	return c.JSON(dto.CommentResponse{
+		ID:        comment.ID,
+		TaskID:    comment.TaskId,
+		UserID:    comment.UserId,
+		Body:      comment.Body,
+		ParentID:  textOrNil(comment.ParentId),
+		Resolved:  comment.Resolved,
+		CreatedAt: comment.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+		UpdatedAt: comment.UpdatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+		User: dto.UserResponse{
+			ID:        u.ID,
+			Name:      u.Name,
+			Email:     u.Email,
+			Color:     u.Color,
+			AvatarURL: textOrNil(u.AvatarUrl),
+		},
+		Reactions: []dto.CommentReactionResponse{},
+	})
 }
 
 func (h *CommentsHandler) DeleteComment(c *fiber.Ctx) error {
@@ -143,7 +167,7 @@ func (h *CommentsHandler) DeleteComment(c *fiber.Ctx) error {
 	_ = row.Scan(&taskID)
 
 	if err := h.q.DeleteComment(ctx, commentID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 
 	if taskID != "" {
@@ -156,7 +180,11 @@ func (h *CommentsHandler) DeleteComment(c *fiber.Ctx) error {
 		}
 	}
 
-	return c.JSON(fiber.Map{"ok": true})
+	return c.JSON(dto.OKResponse{OK: true})
+}
+
+type ToggleReactionReq struct {
+	Emoji string `json:"emoji"`
 }
 
 func (h *CommentsHandler) ToggleReaction(c *fiber.Ctx) error {
@@ -164,11 +192,9 @@ func (h *CommentsHandler) ToggleReaction(c *fiber.Ctx) error {
 	user := c.Locals("user").(*db.GetSessionWithUserRow)
 	ctx := c.Context()
 
-	var req struct {
-		Emoji string `json:"emoji"`
-	}
+	var req ToggleReactionReq
 	if err := c.BodyParser(&req); err != nil || req.Emoji == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "emoji is required"})
+		return sendError(c, fiber.StatusBadRequest, "emoji is required")
 	}
 
 	var taskID string
@@ -198,7 +224,7 @@ func (h *CommentsHandler) ToggleReaction(c *fiber.Ctx) error {
 			Emoji:     req.Emoji,
 		})
 		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+			return sendError(c, fiber.StatusInternalServerError, err.Error())
 		}
 	}
 
@@ -212,5 +238,5 @@ func (h *CommentsHandler) ToggleReaction(c *fiber.Ctx) error {
 		}
 	}
 
-	return c.JSON(fiber.Map{"reacted": !hasReacted})
+	return c.JSON(dto.ReactionToggleResponse{Reacted: !hasReacted})
 }
