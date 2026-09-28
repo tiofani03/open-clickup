@@ -2,7 +2,7 @@
 # Production image for Open ClickUp (Next.js 16 + Prisma 7 + Postgres).
 
 FROM node:22-alpine AS base
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@10.6.1 --activate
 WORKDIR /app
 
 # --- install dependencies (cached on lockfile) ---
