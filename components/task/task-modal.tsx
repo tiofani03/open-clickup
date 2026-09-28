@@ -20,8 +20,7 @@ import {
   Check,
 } from "lucide-react";
 import { apiGet, apiSend } from "@/lib/api";
-import type { TaskDetail } from "@/lib/queries";
-import type { TaskPatch } from "@/lib/tasks";
+import type { TaskDetail, TaskPatch } from "@/lib/queries";
 import { Priority } from "@/lib/enums";
 import { StatusControl, StatusCircle } from "@/components/menus/status-control";
 import { PriorityControl } from "@/components/menus/priority-control";
