@@ -428,7 +428,7 @@ function ListItemRow({ list, depth }: { list: ListNode & { spaceId?: string }; d
   return (
     <Link
       href={`/l/${list.id}`}
-      onDoubleClick={(e) => { e.preventDefault(); setRenaming(true); }}
+      onDoubleClick={(e: React.MouseEvent) => { e.preventDefault(); setRenaming(true); }}
       className={cn(
         "group flex items-center gap-2 rounded-md py-1.5 pr-2 text-[13px]",
         active ? "bg-cu-sidebar-active font-medium text-cu-purple-dark" : "text-cu-text hover:bg-cu-hover-strong",

@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { ZodType } from "zod";
 
 /** Throw to short-circuit a route handler with a specific HTTP status. */
@@ -30,28 +29,16 @@ export async function readJson<T>(req: Request, schema: ZodType<T>): Promise<T> 
 }
 
 /** Normalize any thrown value into a JSON error response. */
-export function handleError(e: unknown): NextResponse {
+export function handleError(e: unknown): Response {
   if (e instanceof ApiError) {
-    return NextResponse.json({ error: e.message }, { status: e.status });
+    return Response.json({ error: e.message }, { status: e.status });
   }
   // Prisma "record not found" → 404
   const code = (e as { code?: string })?.code;
   if (code === "P2025") {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return Response.json({ error: "Not found" }, { status: 404 });
   }
   console.error("[api]", e);
-  return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  return Response.json({ error: "Internal server error" }, { status: 500 });
 }
 
-/** Wrap a route handler so thrown errors become consistent JSON responses. */
-export function route<Ctx>(
-  fn: (req: Request, ctx: Ctx) => Promise<NextResponse>,
-): (req: Request, ctx: Ctx) => Promise<NextResponse> {
-  return async (req, ctx) => {
-    try {
-      return await fn(req, ctx);
-    } catch (e) {
-      return handleError(e);
-    }
-  };
-}

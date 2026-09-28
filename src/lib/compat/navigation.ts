@@ -26,7 +26,8 @@ export function useParams<T extends Record<string, string | undefined> = Record<
   return useRouterParams() as T;
 }
 
-export function useSearchParams() {
-  const [searchParams, setSearchParams] = useRouterSearchParams();
-  return [searchParams, setSearchParams] as const;
+export function useSearchParams(): URLSearchParams {
+  const [searchParams] = useRouterSearchParams();
+  return searchParams;
 }
+
