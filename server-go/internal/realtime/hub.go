@@ -5,8 +5,8 @@ import (
 )
 
 type Event struct {
-	Type    string      `json:"type"`
-	Payload interface{} `json:"payload"`
+	Type   string `json:"type"`
+	ListID string `json:"listId,omitempty"`
 }
 
 type Hub struct {

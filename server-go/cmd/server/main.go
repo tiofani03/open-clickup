@@ -119,7 +119,7 @@ func main() {
 	tasks.Delete("/:taskId", auth.RequireRole(q, db.MemberRoleMEMBER), taskH.DeleteTask)
 
 	// Comments & Reactions
-	commentH := handlers.NewCommentsHandler(q)
+	commentH := handlers.NewCommentsHandler(pool, q)
 	tasks.Post("/:taskId/comments", commentH.CreateComment)
 	comments := api.Group("/comments", auth.RequireUser(q))
 	comments.Patch("/:commentId", commentH.UpdateComment)
@@ -127,7 +127,7 @@ func main() {
 	comments.Post("/:commentId/reactions", commentH.ToggleReaction)
 
 	// Checklists
-	checklistH := handlers.NewChecklistsHandler(q)
+	checklistH := handlers.NewChecklistsHandler(pool, q)
 	tasks.Post("/:taskId/checklists", checklistH.CreateChecklist)
 	checklists := api.Group("/checklists", auth.RequireUser(q))
 	checklists.Patch("/:checklistId", checklistH.UpdateChecklist)
@@ -137,6 +137,14 @@ func main() {
 	checklistItems := api.Group("/checklist-items", auth.RequireUser(q))
 	checklistItems.Patch("/:itemId", checklistH.UpdateItem)
 	checklistItems.Delete("/:itemId", checklistH.DeleteItem)
+
+	// In production, serve built SPA from ./dist
+	if os.Getenv("NODE_ENV") == "production" {
+		app.Static("/", "./dist")
+		app.Get("*", func(c *fiber.Ctx) error {
+			return c.SendFile("./dist/index.html")
+		})
+	}
 
 	port := os.Getenv("PORT")
 	if port == "" {

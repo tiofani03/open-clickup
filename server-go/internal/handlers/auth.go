@@ -22,6 +22,13 @@ func textOrNil(t pgtype.Text) *string {
 	return nil
 }
 
+func stringPtrToText(s *string) pgtype.Text {
+	if s != nil {
+		return pgtype.Text{String: *s, Valid: true}
+	}
+	return pgtype.Text{Valid: false}
+}
+
 type AuthHandler struct {
 	q *db.Queries
 }

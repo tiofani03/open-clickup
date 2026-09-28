@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"time"
@@ -35,6 +36,120 @@ type CreateTaskReq struct {
 	Assignees    []string `json:"assigneeIds"`
 }
 
+func (h *TasksHandler) getFormattedTask(ctx context.Context, taskID string) (fiber.Map, error) {
+	task, err := h.q.GetTaskByID(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+
+	assignees, _ := h.q.ListTaskAssignees(ctx, taskID)
+	assigneeList := make([]interface{}, len(assignees))
+	for ai, a := range assignees {
+		assigneeList[ai] = fiber.Map{
+			"userId": a.UserId,
+			"user": fiber.Map{
+				"id":        a.UserId,
+				"name":      a.UserName,
+				"email":     a.UserEmail,
+				"color":     a.UserColor,
+				"avatarUrl": textOrNil(a.UserAvatarUrl),
+			},
+		}
+	}
+
+	tags, _ := h.q.ListTaskTags(ctx, taskID)
+	tagList := make([]interface{}, len(tags))
+	for ti, tg := range tags {
+		tagList[ti] = fiber.Map{
+			"tagId": tg.TagId,
+			"tag": fiber.Map{
+				"id":    tg.TagId,
+				"name":  tg.TagName,
+				"color": tg.TagColor,
+			},
+		}
+	}
+
+	subtasks, _ := h.q.ListSubtasksByParent(ctx, pgtype.Text{String: taskID, Valid: true})
+	subtaskList := make([]interface{}, len(subtasks))
+	for si, sub := range subtasks {
+		subtaskList[si] = fiber.Map{
+			"id":       sub.ID,
+			"name":     sub.Name,
+			"statusId": sub.StatusId,
+			"position": sub.Position,
+			"status": fiber.Map{
+				"id":    sub.StatusId,
+				"name":  sub.StatusName,
+				"color": sub.StatusColor,
+				"type":  string(sub.StatusType),
+			},
+		}
+	}
+
+	var priority *string
+	if task.Priority.Valid {
+		pStr := string(task.Priority.Priority)
+		priority = &pStr
+	}
+
+	var startStr, dueStr, compStr *string
+	if task.StartDate.Valid {
+		s := task.StartDate.Time.Format("2006-01-02T15:04:05.000Z")
+		startStr = &s
+	}
+	if task.DueDate.Valid {
+		s := task.DueDate.Time.Format("2006-01-02T15:04:05.000Z")
+		dueStr = &s
+	}
+	if task.CompletedAt.Valid {
+		s := task.CompletedAt.Time.Format("2006-01-02T15:04:05.000Z")
+		compStr = &s
+	}
+
+	var est *int32
+	if task.TimeEstimate.Valid {
+		est = &task.TimeEstimate.Int32
+	}
+
+	return fiber.Map{
+		"id":           task.ID,
+		"listId":       task.ListId,
+		"statusId":     task.StatusId,
+		"parentId":     textOrNil(task.ParentId),
+		"name":         task.Name,
+		"description":  textOrNil(task.Description),
+		"priority":     priority,
+		"position":     task.Position,
+		"startDate":    startStr,
+		"dueDate":      dueStr,
+		"timeEstimate": est,
+		"createdById":  textOrNil(task.CreatedById),
+		"createdAt":    task.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+		"updatedAt":    task.UpdatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+		"completedAt":  compStr,
+		"archived":     task.Archived,
+		"recurrence":   textOrNil(task.Recurrence),
+		"status": fiber.Map{
+			"id":       task.StatusId,
+			"listId":   task.ListId,
+			"name":     task.StatusName,
+			"color":    task.StatusColor,
+			"type":     string(task.StatusType),
+			"position": 0,
+		},
+		"assignees":         assigneeList,
+		"tags":              tagList,
+		"subtasks":          subtaskList,
+		"customFieldValues": []interface{}{},
+		"_count": fiber.Map{
+			"comments":   0,
+			"checklists": 0,
+			"subtasks":   len(subtaskList),
+		},
+	}, nil
+}
+
 func (h *TasksHandler) CreateTask(c *fiber.Ctx) error {
 	user := c.Locals("user").(*db.GetSessionWithUserRow)
 	var req CreateTaskReq
@@ -43,11 +158,21 @@ func (h *TasksHandler) CreateTask(c *fiber.Ctx) error {
 	}
 
 	req.Name = strings.TrimSpace(req.Name)
-	if req.Name == "" || req.ListID == "" || req.StatusID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "name, listId, and statusId are required"})
+	if req.Name == "" || req.ListID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "name and listId are required"})
 	}
 
 	ctx := c.Context()
+
+	// Default statusId if omitted
+	if req.StatusID == "" {
+		statuses, err := h.q.ListStatusesByList(ctx, req.ListID)
+		if err != nil || len(statuses) == 0 {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "List has no statuses"})
+		}
+		req.StatusID = statuses[0].ID
+	}
+
 	taskID := cuid()
 
 	// Find max position in list
@@ -85,9 +210,9 @@ func (h *TasksHandler) CreateTask(c *fiber.Ctx) error {
 		ID:           taskID,
 		ListId:       req.ListID,
 		StatusId:     req.StatusID,
-		ParentId:     pgtype.Text{String: *req.ParentID, Valid: req.ParentID != nil},
+		ParentId:     stringPtrToText(req.ParentID),
 		Name:         req.Name,
-		Description:  pgtype.Text{String: *req.Description, Valid: req.Description != nil},
+		Description:  stringPtrToText(req.Description),
 		Priority:     prio,
 		Position:     lastPos + 1000,
 		StartDate:    startDate,
@@ -118,9 +243,13 @@ func (h *TasksHandler) CreateTask(c *fiber.Ctx) error {
 	})
 
 	realtime.DefaultHub.Broadcast(realtime.Event{
-		Type:    "task:created",
-		Payload: fiber.Map{"taskId": task.ID, "listId": task.ListId},
+		Type:   "list",
+		ListID: task.ListId,
 	})
+
+	if formatted, err := h.getFormattedTask(ctx, task.ID); err == nil {
+		return c.Status(fiber.StatusCreated).JSON(formatted)
+	}
 
 	return c.Status(fiber.StatusCreated).JSON(task)
 }
@@ -299,10 +428,12 @@ func (h *TasksHandler) GetTask(c *fiber.Ctx) error {
 		"archived":     task.Archived,
 		"recurrence":   textOrNil(task.Recurrence),
 		"status": fiber.Map{
-			"id":    task.StatusId,
-			"name":  task.StatusName,
-			"color": task.StatusColor,
-			"type":  string(task.StatusType),
+			"id":       task.StatusId,
+			"listId":   task.ListId,
+			"name":     task.StatusName,
+			"color":    task.StatusColor,
+			"type":     string(task.StatusType),
+			"position": 0,
 		},
 		"list": fiber.Map{
 			"id":   task.ListId,
@@ -312,30 +443,34 @@ func (h *TasksHandler) GetTask(c *fiber.Ctx) error {
 			"id":   task.SpaceID,
 			"name": task.SpaceName,
 		},
-		"assignees":   assigneeList,
-		"tags":        tagList,
-		"subtasks":    subtaskList,
-		"checklists":  checklistList,
-		"comments":    commentList,
-		"activities":  activityList,
-		"attachments": []interface{}{},
-		"timeEntries": []interface{}{},
-		"blockedBy":   []interface{}{},
-		"blocking":    []interface{}{},
+		"assignees":         assigneeList,
+		"tags":              tagList,
+		"subtasks":          subtaskList,
+		"checklists":        checklistList,
+		"comments":          commentList,
+		"activities":        activityList,
+		"customFieldValues": []interface{}{},
+		"_count": fiber.Map{
+			"comments":   len(commentList),
+			"checklists": len(checklistList),
+			"subtasks":   len(subtaskList),
+		},
 	})
 }
 
 type UpdateTaskReq struct {
-	Name         string   `json:"name"`
-	Description  *string  `json:"description"`
-	StatusID     *string  `json:"statusId"`
-	Priority     *string  `json:"priority"`
-	Position     *float64 `json:"position"`
-	StartDate    *string  `json:"startDate"`
-	DueDate      *string  `json:"dueDate"`
-	TimeEstimate *int32   `json:"timeEstimate"`
-	Archived     *bool    `json:"archived"`
-	Recurrence   *string  `json:"recurrence"`
+	Name         *string   `json:"name"`
+	Description  *string   `json:"description"`
+	StatusID     *string   `json:"statusId"`
+	Priority     *string   `json:"priority"`
+	Position     *float64  `json:"position"`
+	StartDate    *string   `json:"startDate"`
+	DueDate      *string   `json:"dueDate"`
+	TimeEstimate *int32    `json:"timeEstimate"`
+	Archived     *bool     `json:"archived"`
+	Recurrence   *string   `json:"recurrence"`
+	AssigneeIDs  *[]string `json:"assigneeIds"`
+	TagIDs       *[]string `json:"tagIds"`
 }
 
 func (h *TasksHandler) UpdateTask(c *fiber.Ctx) error {
@@ -353,17 +488,37 @@ func (h *TasksHandler) UpdateTask(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Task not found"})
 	}
 
+	name := existing.Name
+	if req.Name != nil && strings.TrimSpace(*req.Name) != "" {
+		name = strings.TrimSpace(*req.Name)
+		if name != existing.Name {
+			data, _ := json.Marshal(fiber.Map{"name": name})
+			_, _ = h.q.CreateActivity(ctx, db.CreateActivityParams{
+				ID:     cuid(),
+				TaskId: taskID,
+				UserId: pgtype.Text{String: user.UserId, Valid: true},
+				Type:   "renamed",
+				Data:   data,
+			})
+		}
+	}
+
+	desc := existing.Description
+	if req.Description != nil {
+		desc = stringPtrToText(req.Description)
+	}
+
 	statusID := existing.StatusId
-	var completedAt pgtype.Timestamp
+	var completedAt pgtype.Timestamp = existing.CompletedAt
 	if req.StatusID != nil && *req.StatusID != existing.StatusId {
 		statusID = *req.StatusID
-		// Check target status type
 		st, _ := h.q.GetStatusByID(ctx, statusID)
 		if st.Type == db.StatusTypeDONE {
 			completedAt = pgtype.Timestamp{Time: time.Now(), Valid: true}
+		} else {
+			completedAt = pgtype.Timestamp{Valid: false}
 		}
 
-		// Log status changed activity
 		data, _ := json.Marshal(fiber.Map{"from": existing.StatusName, "to": st.Name})
 		_, _ = h.q.CreateActivity(ctx, db.CreateActivityParams{
 			ID:     cuid(),
@@ -372,15 +527,23 @@ func (h *TasksHandler) UpdateTask(c *fiber.Ctx) error {
 			Type:   "status_changed",
 			Data:   data,
 		})
-	} else {
-		completedAt = existing.CompletedAt
 	}
 
-	var prio db.NullPriority
+	var prio db.NullPriority = existing.Priority
 	if req.Priority != nil {
-		prio = db.NullPriority{Priority: db.Priority(*req.Priority), Valid: true}
-	} else {
-		prio = existing.Priority
+		if *req.Priority != "" {
+			prio = db.NullPriority{Priority: db.Priority(*req.Priority), Valid: true}
+		} else {
+			prio = db.NullPriority{Valid: false}
+		}
+		data, _ := json.Marshal(fiber.Map{"priority": *req.Priority})
+		_, _ = h.q.CreateActivity(ctx, db.CreateActivityParams{
+			ID:     cuid(),
+			TaskId: taskID,
+			UserId: pgtype.Text{String: user.UserId, Valid: true},
+			Type:   "priority_changed",
+			Data:   data,
+		})
 	}
 
 	pos := existing.Position
@@ -390,15 +553,23 @@ func (h *TasksHandler) UpdateTask(c *fiber.Ctx) error {
 
 	var start pgtype.Timestamp = existing.StartDate
 	if req.StartDate != nil {
-		if t, err := time.Parse(time.RFC3339, *req.StartDate); err == nil {
-			start = pgtype.Timestamp{Time: t, Valid: true}
+		if *req.StartDate != "" {
+			if t, err := time.Parse(time.RFC3339, *req.StartDate); err == nil {
+				start = pgtype.Timestamp{Time: t, Valid: true}
+			}
+		} else {
+			start = pgtype.Timestamp{Valid: false}
 		}
 	}
 
 	var due pgtype.Timestamp = existing.DueDate
 	if req.DueDate != nil {
-		if t, err := time.Parse(time.RFC3339, *req.DueDate); err == nil {
-			due = pgtype.Timestamp{Time: t, Valid: true}
+		if *req.DueDate != "" {
+			if t, err := time.Parse(time.RFC3339, *req.DueDate); err == nil {
+				due = pgtype.Timestamp{Time: t, Valid: true}
+			}
+		} else {
+			due = pgtype.Timestamp{Valid: false}
 		}
 	}
 
@@ -412,10 +583,15 @@ func (h *TasksHandler) UpdateTask(c *fiber.Ctx) error {
 		arch = *req.Archived
 	}
 
+	rec := existing.Recurrence
+	if req.Recurrence != nil {
+		rec = stringPtrToText(req.Recurrence)
+	}
+
 	task, err := h.q.UpdateTask(ctx, db.UpdateTaskParams{
 		ID:           taskID,
-		Name:         req.Name,
-		Description:  pgtype.Text{String: *req.Description, Valid: req.Description != nil},
+		Name:         name,
+		Description:  desc,
 		Priority:     prio,
 		StatusId:     statusID,
 		Position:     pos,
@@ -424,16 +600,42 @@ func (h *TasksHandler) UpdateTask(c *fiber.Ctx) error {
 		TimeEstimate: est,
 		CompletedAt:  completedAt,
 		Archived:     arch,
-		Recurrence:   pgtype.Text{String: *req.Recurrence, Valid: req.Recurrence != nil},
+		Recurrence:   rec,
 	})
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
 	}
 
+	// Assignees full replacement if provided
+	if req.AssigneeIDs != nil {
+		_, _ = h.pool.Exec(ctx, `DELETE FROM "TaskAssignee" WHERE "taskId" = $1`, taskID)
+		for _, uid := range *req.AssigneeIDs {
+			_, _ = h.q.AddTaskAssignee(ctx, db.AddTaskAssigneeParams{
+				TaskId: taskID,
+				UserId: uid,
+			})
+		}
+	}
+
+	// Tags full replacement if provided
+	if req.TagIDs != nil {
+		_, _ = h.pool.Exec(ctx, `DELETE FROM "TaskTag" WHERE "taskId" = $1`, taskID)
+		for _, tid := range *req.TagIDs {
+			_, _ = h.q.AddTaskTag(ctx, db.AddTaskTagParams{
+				TaskId: taskID,
+				TagId:  tid,
+			})
+		}
+	}
+
 	realtime.DefaultHub.Broadcast(realtime.Event{
-		Type:    "task:updated",
-		Payload: fiber.Map{"taskId": task.ID, "listId": task.ListId},
+		Type:   "list",
+		ListID: task.ListId,
 	})
+
+	if formatted, err := h.getFormattedTask(ctx, task.ID); err == nil {
+		return c.JSON(formatted)
+	}
 
 	return c.JSON(task)
 }
@@ -446,8 +648,8 @@ func (h *TasksHandler) DeleteTask(c *fiber.Ctx) error {
 	if err == nil {
 		_ = h.q.DeleteTask(ctx, taskID)
 		realtime.DefaultHub.Broadcast(realtime.Event{
-			Type:    "task:deleted",
-			Payload: fiber.Map{"taskId": taskID, "listId": task.ListId},
+			Type:   "list",
+			ListID: task.ListId,
 		})
 	}
 
@@ -457,10 +659,13 @@ func (h *TasksHandler) DeleteTask(c *fiber.Ctx) error {
 // ---------------- Bulk Operations ----------------
 
 type BulkTasksReq struct {
-	TaskIDs  []string `json:"taskIds"`
-	StatusID *string  `json:"statusId"`
-	Priority *string  `json:"priority"`
-	Delete   *bool    `json:"delete"`
+	IDs    []string `json:"ids"`
+	Delete *bool    `json:"delete"`
+	Patch  *struct {
+		StatusID    *string  `json:"statusId"`
+		Priority    *string  `json:"priority"`
+		AssigneeIDs []string `json:"assigneeIds"`
+	} `json:"patch"`
 }
 
 func (h *TasksHandler) BulkTasks(c *fiber.Ctx) error {
@@ -469,21 +674,64 @@ func (h *TasksHandler) BulkTasks(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
 	}
 
+	if len(req.IDs) == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "ids are required"})
+	}
+
 	ctx := c.Context()
-	for _, id := range req.TaskIDs {
-		if req.Delete != nil && *req.Delete {
-			_ = h.q.DeleteTask(ctx, id)
-		} else if req.StatusID != nil {
-			_, _ = h.pool.Exec(ctx, `UPDATE "Task" SET "statusId" = $1, "updatedAt" = NOW() WHERE id = $2`, *req.StatusID, id)
-		} else if req.Priority != nil {
-			_, _ = h.pool.Exec(ctx, `UPDATE "Task" SET priority = $1, "updatedAt" = NOW() WHERE id = $2`, *req.Priority, id)
+
+	// Find distinct listIds to notify
+	rows, err := h.pool.Query(ctx, `SELECT DISTINCT "listId" FROM "Task" WHERE id = ANY($1)`, req.IDs)
+	var listIDs []string
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var lid string
+			if err := rows.Scan(&lid); err == nil {
+				listIDs = append(listIDs, lid)
+			}
 		}
 	}
 
-	realtime.DefaultHub.Broadcast(realtime.Event{
-		Type:    "task:bulk_updated",
-		Payload: fiber.Map{"taskIds": req.TaskIDs},
-	})
+	if req.Delete != nil && *req.Delete {
+		for _, id := range req.IDs {
+			_ = h.q.DeleteTask(ctx, id)
+		}
+	} else if req.Patch != nil {
+		if req.Patch.StatusID != nil {
+			var completedAt interface{} = nil
+			st, err := h.q.GetStatusByID(ctx, *req.Patch.StatusID)
+			if err == nil && st.Type == db.StatusTypeDONE {
+				completedAt = time.Now()
+			}
+			_, _ = h.pool.Exec(ctx, `UPDATE "Task" SET "statusId" = $1, "completedAt" = $2, "updatedAt" = NOW() WHERE id = ANY($3)`, *req.Patch.StatusID, completedAt, req.IDs)
+		}
+		if req.Patch.Priority != nil {
+			if *req.Patch.Priority != "" {
+				_, _ = h.pool.Exec(ctx, `UPDATE "Task" SET priority = $1, "updatedAt" = NOW() WHERE id = ANY($2)`, *req.Patch.Priority, req.IDs)
+			} else {
+				_, _ = h.pool.Exec(ctx, `UPDATE "Task" SET priority = NULL, "updatedAt" = NOW() WHERE id = ANY($1)`, req.IDs)
+			}
+		}
+		if len(req.Patch.AssigneeIDs) > 0 {
+			_, _ = h.pool.Exec(ctx, `DELETE FROM "TaskAssignee" WHERE "taskId" = ANY($1)`, req.IDs)
+			for _, tid := range req.IDs {
+				for _, uid := range req.Patch.AssigneeIDs {
+					_, _ = h.q.AddTaskAssignee(ctx, db.AddTaskAssigneeParams{
+						TaskId: tid,
+						UserId: uid,
+					})
+				}
+			}
+		}
+	}
 
-	return c.JSON(fiber.Map{"ok": true})
+	for _, lid := range listIDs {
+		realtime.DefaultHub.Broadcast(realtime.Event{
+			Type:   "list",
+			ListID: lid,
+		})
+	}
+
+	return c.JSON(fiber.Map{"ok": true, "count": len(req.IDs)})
 }
