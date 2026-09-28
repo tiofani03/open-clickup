@@ -71,6 +71,37 @@ func main() {
 
 	api.Get("/me", auth.RequireUser(q), authH.Me)
 
+	// Bootstrap
+	bootstrapH := handlers.NewBootstrapHandler(pool, q)
+	api.Get("/bootstrap", auth.RequireUser(q), bootstrapH.GetBootstrap)
+
+	// Hierarchy: Spaces, Folders, Lists
+	hierH := handlers.NewHierarchyHandler(pool, q)
+	spaces := api.Group("/spaces", auth.RequireUser(q))
+	spaces.Post("/", auth.RequireRole(q, db.MemberRoleMEMBER), hierH.CreateSpace)
+	spaces.Patch("/:spaceId", auth.RequireRole(q, db.MemberRoleMEMBER), hierH.UpdateSpace)
+	spaces.Delete("/:spaceId", auth.RequireRole(q, db.MemberRoleMEMBER), hierH.DeleteSpace)
+
+	folders := api.Group("/folders", auth.RequireUser(q))
+	folders.Post("/", auth.RequireRole(q, db.MemberRoleMEMBER), hierH.CreateFolder)
+	folders.Patch("/:folderId", auth.RequireRole(q, db.MemberRoleMEMBER), hierH.UpdateFolder)
+	folders.Delete("/:folderId", auth.RequireRole(q, db.MemberRoleMEMBER), hierH.DeleteFolder)
+
+	lists := api.Group("/lists", auth.RequireUser(q))
+	lists.Post("/", auth.RequireRole(q, db.MemberRoleMEMBER), hierH.CreateList)
+	lists.Get("/:listId", hierH.GetList)
+	lists.Patch("/:listId", auth.RequireRole(q, db.MemberRoleMEMBER), hierH.UpdateList)
+	lists.Delete("/:listId", auth.RequireRole(q, db.MemberRoleMEMBER), hierH.DeleteList)
+	lists.Post("/:listId/favorite", hierH.ToggleFavorite)
+
+	// Statuses & Views
+	statusH := handlers.NewStatusesHandler(q)
+	api.Patch("/statuses/:statusId", auth.RequireRole(q, db.MemberRoleMEMBER), statusH.UpdateStatus)
+	api.Delete("/statuses/:statusId", auth.RequireRole(q, db.MemberRoleMEMBER), statusH.DeleteStatus)
+
+	viewH := handlers.NewViewsHandler(q)
+	api.Patch("/views/:viewId", auth.RequireUser(q), viewH.UpdateViewConfig)
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
