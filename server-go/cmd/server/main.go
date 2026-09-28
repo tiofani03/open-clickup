@@ -102,6 +102,42 @@ func main() {
 	viewH := handlers.NewViewsHandler(q)
 	api.Patch("/views/:viewId", auth.RequireUser(q), viewH.UpdateViewConfig)
 
+	// Stream (SSE realtime)
+	api.Get("/stream", handlers.StreamHandler)
+
+	// Search
+	searchH := handlers.NewSearchHandler(pool)
+	api.Get("/search", auth.RequireUser(q), searchH.Search)
+
+	// Tasks
+	taskH := handlers.NewTasksHandler(pool, q)
+	tasks := api.Group("/tasks", auth.RequireUser(q))
+	tasks.Post("/", auth.RequireRole(q, db.MemberRoleMEMBER), taskH.CreateTask)
+	tasks.Post("/bulk", auth.RequireRole(q, db.MemberRoleMEMBER), taskH.BulkTasks)
+	tasks.Get("/:taskId", taskH.GetTask)
+	tasks.Patch("/:taskId", auth.RequireRole(q, db.MemberRoleMEMBER), taskH.UpdateTask)
+	tasks.Delete("/:taskId", auth.RequireRole(q, db.MemberRoleMEMBER), taskH.DeleteTask)
+
+	// Comments & Reactions
+	commentH := handlers.NewCommentsHandler(q)
+	tasks.Post("/:taskId/comments", commentH.CreateComment)
+	comments := api.Group("/comments", auth.RequireUser(q))
+	comments.Patch("/:commentId", commentH.UpdateComment)
+	comments.Delete("/:commentId", commentH.DeleteComment)
+	comments.Post("/:commentId/reactions", commentH.ToggleReaction)
+
+	// Checklists
+	checklistH := handlers.NewChecklistsHandler(q)
+	tasks.Post("/:taskId/checklists", checklistH.CreateChecklist)
+	checklists := api.Group("/checklists", auth.RequireUser(q))
+	checklists.Patch("/:checklistId", checklistH.UpdateChecklist)
+	checklists.Delete("/:checklistId", checklistH.DeleteChecklist)
+	checklists.Post("/:checklistId/items", checklistH.CreateItem)
+
+	checklistItems := api.Group("/checklist-items", auth.RequireUser(q))
+	checklistItems.Patch("/:itemId", checklistH.UpdateItem)
+	checklistItems.Delete("/:itemId", checklistH.DeleteItem)
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
