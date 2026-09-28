@@ -8,8 +8,7 @@ import {
 } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { apiGet, apiSend } from "@/lib/api";
-import type { ListData, TaskWithRelations, UserLite, WorkspaceTree } from "@/lib/queries";
-import type { TaskPatch } from "@/lib/tasks";
+import type { ListData, TaskWithRelations, UserLite, WorkspaceTree, TaskPatch } from "@/lib/queries";
 
 export type Bootstrap = { currentUser: UserLite; workspace: WorkspaceTree; favorites: string[] };
 

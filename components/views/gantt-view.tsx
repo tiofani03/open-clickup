@@ -11,8 +11,7 @@ import {
   addDays,
 } from "date-fns";
 import { cn } from "@/lib/utils";
-import type { ListData, TaskWithRelations } from "@/lib/queries";
-import type { TaskPatch } from "@/lib/tasks";
+import type { ListData, TaskWithRelations, TaskPatch } from "@/lib/queries";
 import { useUpdateTask } from "@/lib/hooks";
 import { StatusCircle } from "@/components/menus/status-control";
 import { AvatarStack } from "@/components/ui/avatar";

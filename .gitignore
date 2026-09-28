@@ -19,6 +19,7 @@
 
 # production
 /build
+/dist
 
 # misc
 .DS_Store
@@ -58,3 +59,5 @@ next-env.d.ts
 # user uploads
 /public/uploads/*
 !/public/uploads/.gitkeep
+
+.idea/

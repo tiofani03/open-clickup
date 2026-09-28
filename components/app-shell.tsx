@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { PanelLeft, Menu } from "lucide-react";
+import { Outlet, Navigate } from "react-router";
 import { useBootstrap, useRealtime } from "@/lib/hooks";
 import { WorkspaceProvider } from "@/components/workspace-context";
 import { Sidebar } from "@/components/sidebar/sidebar";
@@ -15,7 +16,7 @@ function isTyping(target: EventTarget | null): boolean {
   return el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable;
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({ children }: { children?: React.ReactNode }) {
   const { data, isLoading, error } = useBootstrap();
   const [collapsed, setCollapsed] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -60,12 +61,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   if (isLoading) return <BootSkeleton />;
-  if (error || !data)
+  if (error || !data) {
+    if (error && String(error).includes("401")) {
+      return <Navigate to="/login" replace />;
+    }
     return (
       <div className="flex h-full items-center justify-center text-sm text-cu-text-secondary">
         Failed to load workspace. Is the database seeded? (`pnpm db:seed`)
       </div>
     );
+  }
 
   return (
     <WorkspaceProvider data={data}>
@@ -107,7 +112,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
             <span className="text-[14px] font-semibold">Open ClickUp</span>
           </div>
-          {children}
+          {children ?? <Outlet />}
         </main>
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
         <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
