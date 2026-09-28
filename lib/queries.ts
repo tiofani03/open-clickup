@@ -1,179 +1,279 @@
-import { Prisma } from "@/lib/generated/prisma/client";
-import { prisma } from "@/lib/db";
+import type { MemberRole, StatusType, Priority, CustomFieldType, ViewType } from "@/lib/enums";
 
 // ----------------------------------------------------------------------------
-// Reusable include shapes (single source of truth for API <-> client types)
+// User & Status Shapes
 // ----------------------------------------------------------------------------
 
-export const userSelect = {
-  id: true,
-  name: true,
-  email: true,
-  color: true,
-  avatarUrl: true,
-} satisfies Prisma.UserSelect;
+export type UserLite = {
+  id: string;
+  name: string;
+  email: string;
+  color: string;
+  avatarUrl: string | null;
+};
 
-export const taskInclude = {
-  status: true,
-  assignees: { include: { user: { select: userSelect } } },
-  tags: { include: { tag: true } },
-  customFieldValues: true,
-  subtasks: {
-    where: { archived: false },
-    orderBy: { position: "asc" },
-    include: {
-      status: true,
-      assignees: { include: { user: { select: userSelect } } },
-    },
-  },
-  _count: { select: { comments: true, subtasks: true, checklists: true } },
-} satisfies Prisma.TaskInclude;
-
-export type TaskWithRelations = Prisma.TaskGetPayload<{ include: typeof taskInclude }>;
-export type SubtaskWithRelations = TaskWithRelations["subtasks"][number];
-export type UserLite = Prisma.UserGetPayload<{ select: typeof userSelect }>;
+export type StatusModel = {
+  id: string;
+  listId: string;
+  name: string;
+  color: string;
+  type: StatusType;
+  position: number;
+  wipLimit?: number | null;
+};
 
 // ----------------------------------------------------------------------------
-// Workspace tree (for sidebar)
+// Custom Field Shapes
 // ----------------------------------------------------------------------------
 
-export async function getWorkspaceTree() {
-  const workspace = await prisma.workspace.findFirst({
-    orderBy: { createdAt: "asc" },
-    include: {
-      members: { include: { user: { select: userSelect } } },
-      spaces: {
-        orderBy: { position: "asc" },
-        include: {
-          folders: {
-            orderBy: { position: "asc" },
-            include: {
-              lists: {
-                orderBy: { position: "asc" },
-                include: { _count: { select: { tasks: true } } },
-              },
-            },
-          },
-          lists: {
-            where: { folderId: null },
-            orderBy: { position: "asc" },
-            include: { _count: { select: { tasks: true } } },
-          },
-        },
-      },
-    },
-  });
-  return workspace;
-}
+export type CustomFieldOption = {
+  id: string;
+  fieldId: string;
+  name: string;
+  color: string;
+  position: number;
+};
 
-export type WorkspaceTree = NonNullable<Awaited<ReturnType<typeof getWorkspaceTree>>>;
-export type SpaceNode = WorkspaceTree["spaces"][number];
-export type FolderNode = SpaceNode["folders"][number];
-export type ListNode = SpaceNode["lists"][number];
+export type CustomFieldWithOptions = {
+  id: string;
+  listId: string;
+  name: string;
+  type: CustomFieldType;
+  position: number;
+  config?: any;
+  options: CustomFieldOption[];
+};
 
 // ----------------------------------------------------------------------------
-// List detail (statuses, custom fields, views, tasks)
+// Task Shapes
 // ----------------------------------------------------------------------------
 
-export async function getListData(listId: string) {
-  const list = await prisma.list.findUnique({
-    where: { id: listId },
-    include: {
-      space: { select: { id: true, name: true, color: true, icon: true } },
-      folder: { select: { id: true, name: true } },
-      statuses: { orderBy: { position: "asc" } },
-      customFields: {
-        orderBy: { position: "asc" },
-        include: { options: { orderBy: { position: "asc" } } },
-      },
-      views: { orderBy: { position: "asc" } },
-    },
-  });
-  if (!list) return null;
+export type SubtaskWithRelations = {
+  id: string;
+  name: string;
+  statusId: string;
+  position: number;
+  status: StatusModel;
+  assignees?: { user: UserLite; userId?: string }[];
+};
 
-  const tasks = await prisma.task.findMany({
-    where: { listId, parentId: null, archived: false },
-    orderBy: { position: "asc" },
-    include: taskInclude,
-  });
+export type TaskWithRelations = {
+  id: string;
+  listId: string;
+  statusId: string;
+  parentId: string | null;
+  name: string;
+  description: string | null;
+  priority: Priority | null;
+  position: number;
+  startDate: string | Date | null;
+  dueDate: string | Date | null;
+  timeEstimate: number | null;
+  createdById: string | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  completedAt: string | Date | null;
+  archived: boolean;
+  recurrence: string | null;
+  status: StatusModel;
+  assignees: { user: UserLite; userId?: string }[];
+  tags: { tag: { id: string; name: string; color: string }; tagId?: string }[];
+  customFieldValues?: Array<{
+    id: string;
+    fieldId: string;
+    value: string | number | boolean | null;
+  }>;
+  subtasks: SubtaskWithRelations[];
+  _count: { comments: number; subtasks: number; checklists: number };
+};
 
-  // dependency edges between visible tasks (for Gantt arrows)
-  const taskIds = tasks.map((t) => t.id);
-  const dependencies = taskIds.length
-    ? await prisma.taskDependency.findMany({
-        where: { blockerId: { in: taskIds }, blockedId: { in: taskIds } },
-        select: { id: true, blockerId: true, blockedId: true },
-      })
-    : [];
-
-  return { list, tasks, dependencies };
-}
-
-export type ListData = NonNullable<Awaited<ReturnType<typeof getListData>>>;
-export type ListWithMeta = ListData["list"];
-export type StatusModel = ListWithMeta["statuses"][number];
-export type CustomFieldWithOptions = ListWithMeta["customFields"][number];
+export type TaskPatch = {
+  name?: string;
+  description?: string | null;
+  statusId?: string;
+  priority?: Priority | null;
+  position?: number;
+  startDate?: string | null;
+  dueDate?: string | null;
+  timeEstimate?: number | null;
+  recurrence?: string | null;
+  archived?: boolean;
+  assigneeIds?: string[];
+  tagIds?: string[];
+  watcherIds?: string[];
+};
 
 // ----------------------------------------------------------------------------
-// Task detail (full, for the task modal)
+// Workspace Tree (for Sidebar)
 // ----------------------------------------------------------------------------
 
-export async function getTaskDetail(taskId: string) {
-  return prisma.task.findUnique({
-    where: { id: taskId },
-    include: {
-      ...taskInclude,
-      createdBy: { select: userSelect },
-      watchers: { include: { user: { select: userSelect } } },
-      attachments: { orderBy: { createdAt: "desc" } },
-      timeEntries: {
-        orderBy: { startedAt: "desc" },
-        include: { user: { select: userSelect } },
-      },
-      blockedBy: {
-        include: {
-          blocker: {
-            select: { id: true, name: true, listId: true, status: { select: { name: true, color: true, type: true } } },
-          },
-        },
-      },
-      blocking: {
-        include: {
-          blocked: {
-            select: { id: true, name: true, listId: true, status: { select: { name: true, color: true, type: true } } },
-          },
-        },
-      },
-      checklists: {
-        orderBy: { position: "asc" },
-        include: { items: { orderBy: { position: "asc" } } },
-      },
-      comments: {
-        orderBy: { createdAt: "asc" },
-        include: {
-          user: { select: userSelect },
-          reactions: true,
-        },
-      },
-      activities: {
-        orderBy: { createdAt: "desc" },
-        take: 50,
-        include: { user: { select: userSelect } },
-      },
-      list: {
-        select: {
-          id: true,
-          name: true,
-          spaceId: true,
-          statuses: { orderBy: { position: "asc" } },
-          customFields: {
-            orderBy: { position: "asc" },
-            include: { options: { orderBy: { position: "asc" } } },
-          },
-        },
-      },
-    },
-  });
-}
+export type ListNode = {
+  id: string;
+  spaceId: string;
+  folderId: string | null;
+  name: string;
+  color: string | null;
+  icon: string | null;
+  position: number;
+  _count?: { tasks: number };
+};
 
-export type TaskDetail = NonNullable<Awaited<ReturnType<typeof getTaskDetail>>>;
+export type FolderNode = {
+  id: string;
+  spaceId: string;
+  name: string;
+  color: string | null;
+  position: number;
+  lists: ListNode[];
+};
+
+export type SpaceNode = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  color: string;
+  icon: string | null;
+  position: number;
+  folders: FolderNode[];
+  lists: ListNode[];
+};
+
+export type WorkspaceTree = {
+  id: string;
+  name: string;
+  slug: string;
+  members: { role: MemberRole; user: UserLite }[];
+  spaces: SpaceNode[];
+};
+
+// ----------------------------------------------------------------------------
+// List Detail
+// ----------------------------------------------------------------------------
+
+export type ListWithMeta = {
+  id: string;
+  spaceId: string;
+  folderId: string | null;
+  name: string;
+  color: string | null;
+  icon: string | null;
+  position: number;
+  createdAt: string;
+  space: { id: string; name: string; color: string; icon: string | null };
+  folder: { id: string; name: string } | null;
+  statuses: StatusModel[];
+  customFields: CustomFieldWithOptions[];
+  views: Array<{
+    id: string;
+    listId: string;
+    name: string;
+    type: ViewType;
+    position: number;
+    config?: any;
+  }>;
+};
+
+export type TaskDependencyItem = {
+  id: string;
+  blockerId: string;
+  blockedId: string;
+};
+
+export type ListData = {
+  list: ListWithMeta;
+  tasks: TaskWithRelations[];
+  dependencies: TaskDependencyItem[];
+};
+
+// ----------------------------------------------------------------------------
+// Task Detail (for Task Modal)
+// ----------------------------------------------------------------------------
+
+export type TaskChecklistItem = {
+  id: string;
+  checklistId: string;
+  name: string;
+  resolved: boolean;
+  position: number;
+};
+
+export type TaskChecklist = {
+  id: string;
+  name: string;
+  position: number;
+  items: TaskChecklistItem[];
+};
+
+export type CommentReaction = {
+  id: string;
+  commentId: string;
+  userId: string;
+  emoji: string;
+  user: { name: string };
+};
+
+export type TaskComment = {
+  id: string;
+  taskId: string;
+  userId: string;
+  body: string;
+  parentId: string | null;
+  resolved: boolean;
+  createdAt: string;
+  updatedAt: string;
+  user: UserLite;
+  reactions: CommentReaction[];
+};
+
+export type TaskActivity = {
+  id: string;
+  taskId: string;
+  userId: string;
+  type: string;
+  data: any;
+  createdAt: string;
+  user: { name: string; color: string; avatarUrl: string | null };
+};
+
+export type TaskAttachment = {
+  id: string;
+  taskId: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  url: string;
+  createdAt: string;
+};
+
+export type TaskTimeEntry = {
+  id: string;
+  taskId: string;
+  userId: string;
+  startedAt: string;
+  endedAt: string | null;
+  duration: number | null;
+  user: UserLite;
+};
+
+export type TaskDetail = TaskWithRelations & {
+  createdBy: UserLite | null;
+  watchers: { user: UserLite }[];
+  attachments: TaskAttachment[];
+  timeEntries: TaskTimeEntry[];
+  blockedBy: Array<{
+    blocker: { id: string; name: string; listId: string; status: { name: string; color: string; type: StatusType } };
+  }>;
+  blocking: Array<{
+    blocked: { id: string; name: string; listId: string; status: { name: string; color: string; type: StatusType } };
+  }>;
+  checklists: TaskChecklist[];
+  comments: TaskComment[];
+  activities: TaskActivity[];
+  list: {
+    id: string;
+    name: string;
+    spaceId: string;
+    statuses: StatusModel[];
+    customFields: CustomFieldWithOptions[];
+  };
+};
