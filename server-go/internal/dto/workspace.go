@@ -55,6 +55,37 @@ type SpaceResponse struct {
 	Lists       []ListResponse   `json:"lists"`
 }
 
+type SpaceItemResponse struct {
+	ID          string  `json:"id"`
+	WorkspaceID string  `json:"workspaceId"`
+	Name        string  `json:"name"`
+	Color       string  `json:"color"`
+	Icon        *string `json:"icon"`
+	Private     bool    `json:"private"`
+	Position    float64 `json:"position"`
+	CreatedAt   string  `json:"createdAt"`
+}
+
+type FolderItemResponse struct {
+	ID        string  `json:"id"`
+	SpaceID   string  `json:"spaceId"`
+	Name      string  `json:"name"`
+	Position  float64 `json:"position"`
+	Collapsed bool    `json:"collapsed"`
+	CreatedAt string  `json:"createdAt"`
+}
+
+type ListItemResponse struct {
+	ID        string  `json:"id"`
+	SpaceID   string  `json:"spaceId"`
+	FolderID  *string `json:"folderId"`
+	Name      string  `json:"name"`
+	Color     *string `json:"color"`
+	Icon      *string `json:"icon"`
+	Position  float64 `json:"position"`
+	CreatedAt string  `json:"createdAt"`
+}
+
 type WorkspaceMemberResponse struct {
 	Role string       `json:"role"`
 	User UserResponse `json:"user"`

@@ -29,6 +29,13 @@ type CreateSpaceReq struct {
 	Icon  *string `json:"icon"`
 }
 
+var defaultSpaceColors = []string{
+	"#7b68ee", "#fd71af", "#ff5722", "#ff7800", "#2ecd6f", "#1bbc9c", "#0ab1e8", "#9b59b6",
+}
+var defaultSpaceIcons = []string{
+	"🚀", "📣", "⚙️", "🎯", "💡", "📊", "🛠️", "🌱",
+}
+
 func (h *HierarchyHandler) CreateSpace(c *fiber.Ctx) error {
 	var req CreateSpaceReq
 	if err := c.BodyParser(&req); err != nil {
@@ -44,9 +51,17 @@ func (h *HierarchyHandler) CreateSpace(c *fiber.Ctx) error {
 		return sendError(c, fiber.StatusNotFound, "No workspace found")
 	}
 
-	color := "#7b68ee"
-	if req.Color != nil && *req.Color != "" {
-		color = *req.Color
+	spaces, _ := h.q.ListSpacesByWorkspace(c.Context(), ws.ID)
+	count := len(spaces)
+
+	color := defaultSpaceColors[count%len(defaultSpaceColors)]
+	if req.Color != nil && strings.TrimSpace(*req.Color) != "" {
+		color = strings.TrimSpace(*req.Color)
+	}
+
+	icon := defaultSpaceIcons[count%len(defaultSpaceIcons)]
+	if req.Icon != nil && strings.TrimSpace(*req.Icon) != "" {
+		icon = strings.TrimSpace(*req.Icon)
 	}
 
 	space, err := h.q.CreateSpace(c.Context(), db.CreateSpaceParams{
@@ -54,15 +69,24 @@ func (h *HierarchyHandler) CreateSpace(c *fiber.Ctx) error {
 		WorkspaceId: ws.ID,
 		Name:        req.Name,
 		Color:       color,
-		Icon:        pgtype.Text{String: *req.Icon, Valid: req.Icon != nil},
+		Icon:        pgtype.Text{String: icon, Valid: true},
 		Private:     false,
-		Position:    1000,
+		Position:    float64(count * 1000),
 	})
 	if err != nil {
 		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(space)
+	return c.Status(fiber.StatusCreated).JSON(dto.SpaceItemResponse{
+		ID:          space.ID,
+		WorkspaceID: space.WorkspaceId,
+		Name:        space.Name,
+		Color:       space.Color,
+		Icon:        textOrNil(space.Icon),
+		Private:     space.Private,
+		Position:    space.Position,
+		CreatedAt:   space.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+	})
 }
 
 func (h *HierarchyHandler) UpdateSpace(c *fiber.Ctx) error {
@@ -72,17 +96,50 @@ func (h *HierarchyHandler) UpdateSpace(c *fiber.Ctx) error {
 		return sendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
-	space, err := h.q.UpdateSpace(c.Context(), db.UpdateSpaceParams{
-		ID:    spaceID,
-		Name:  req.Name,
-		Color: *req.Color,
-		Icon:  pgtype.Text{String: *req.Icon, Valid: req.Icon != nil},
-	})
+	existing, err := h.q.GetSpaceByID(c.Context(), spaceID)
 	if err != nil {
 		return sendError(c, fiber.StatusNotFound, "Space not found")
 	}
 
-	return c.JSON(space)
+	name := existing.Name
+	if strings.TrimSpace(req.Name) != "" {
+		name = strings.TrimSpace(req.Name)
+	}
+
+	color := existing.Color
+	if req.Color != nil && strings.TrimSpace(*req.Color) != "" {
+		color = strings.TrimSpace(*req.Color)
+	}
+
+	icon := existing.Icon
+	if req.Icon != nil {
+		if strings.TrimSpace(*req.Icon) == "" {
+			icon = pgtype.Text{Valid: false}
+		} else {
+			icon = pgtype.Text{String: strings.TrimSpace(*req.Icon), Valid: true}
+		}
+	}
+
+	space, err := h.q.UpdateSpace(c.Context(), db.UpdateSpaceParams{
+		ID:    spaceID,
+		Name:  name,
+		Color: color,
+		Icon:  icon,
+	})
+	if err != nil {
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
+	}
+
+	return c.JSON(dto.SpaceItemResponse{
+		ID:          space.ID,
+		WorkspaceID: space.WorkspaceId,
+		Name:        space.Name,
+		Color:       space.Color,
+		Icon:        textOrNil(space.Icon),
+		Private:     space.Private,
+		Position:    space.Position,
+		CreatedAt:   space.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+	})
 }
 
 func (h *HierarchyHandler) DeleteSpace(c *fiber.Ctx) error {
@@ -121,7 +178,14 @@ func (h *HierarchyHandler) CreateFolder(c *fiber.Ctx) error {
 		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(folder)
+	return c.Status(fiber.StatusCreated).JSON(dto.FolderItemResponse{
+		ID:        folder.ID,
+		SpaceID:   folder.SpaceId,
+		Name:      folder.Name,
+		Position:  folder.Position,
+		Collapsed: folder.Collapsed,
+		CreatedAt: folder.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+	})
 }
 
 func (h *HierarchyHandler) UpdateFolder(c *fiber.Ctx) error {
@@ -135,13 +199,20 @@ func (h *HierarchyHandler) UpdateFolder(c *fiber.Ctx) error {
 
 	folder, err := h.q.UpdateFolder(c.Context(), db.UpdateFolderParams{
 		ID:   folderID,
-		Name: req.Name,
+		Name: strings.TrimSpace(req.Name),
 	})
 	if err != nil {
 		return sendError(c, fiber.StatusNotFound, "Folder not found")
 	}
 
-	return c.JSON(folder)
+	return c.JSON(dto.FolderItemResponse{
+		ID:        folder.ID,
+		SpaceID:   folder.SpaceId,
+		Name:      folder.Name,
+		Position:  folder.Position,
+		Collapsed: folder.Collapsed,
+		CreatedAt: folder.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+	})
 }
 
 func (h *HierarchyHandler) DeleteFolder(c *fiber.Ctx) error {
@@ -377,16 +448,40 @@ func (h *HierarchyHandler) UpdateList(c *fiber.Ctx) error {
 		return sendError(c, fiber.StatusBadRequest, "Invalid request body")
 	}
 
-	list, err := h.q.UpdateList(c.Context(), db.UpdateListParams{
-		ID:    listID,
-		Name:  req.Name,
-		Color: stringPtrToText(req.Color),
-	})
+	existing, err := h.q.GetListByID(c.Context(), listID)
 	if err != nil {
 		return sendError(c, fiber.StatusNotFound, "List not found")
 	}
 
-	return c.JSON(list)
+	name := existing.Name
+	if strings.TrimSpace(req.Name) != "" {
+		name = strings.TrimSpace(req.Name)
+	}
+
+	color := existing.Color
+	if req.Color != nil {
+		color = stringPtrToText(req.Color)
+	}
+
+	list, err := h.q.UpdateList(c.Context(), db.UpdateListParams{
+		ID:    listID,
+		Name:  name,
+		Color: color,
+	})
+	if err != nil {
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
+	}
+
+	return c.JSON(dto.ListItemResponse{
+		ID:        list.ID,
+		SpaceID:   list.SpaceId,
+		FolderID:  textOrNil(list.FolderId),
+		Name:      list.Name,
+		Color:     textOrNil(list.Color),
+		Icon:      textOrNil(list.Icon),
+		Position:  list.Position,
+		CreatedAt: list.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+	})
 }
 
 func (h *HierarchyHandler) DeleteList(c *fiber.Ctx) error {

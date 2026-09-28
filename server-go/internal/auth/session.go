@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"open-clickup-server/internal/db"
+	"open-clickup-server/internal/dto"
 )
 
 const (
@@ -79,7 +80,7 @@ func RequireUser(q *db.Queries) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		user, err := GetCurrentUser(c.Context(), c, q)
 		if err != nil || user == nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Not authenticated"})
+			return c.Status(fiber.StatusUnauthorized).JSON(dto.ErrorResponse{Error: "Not authenticated"})
 		}
 		c.Locals("user", user)
 		return c.Next()
@@ -88,19 +89,28 @@ func RequireUser(q *db.Queries) fiber.Handler {
 
 func RequireRole(q *db.Queries, minRole db.MemberRole) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		user, err := GetCurrentUser(c.Context(), c, q)
-		if err != nil || user == nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Not authenticated"})
+		var user *db.GetSessionWithUserRow
+		if val := c.Locals("user"); val != nil {
+			if u, ok := val.(*db.GetSessionWithUserRow); ok {
+				user = u
+			}
+		}
+		if user == nil {
+			var err error
+			user, err = GetCurrentUser(c.Context(), c, q)
+			if err != nil || user == nil {
+				return c.Status(fiber.StatusUnauthorized).JSON(dto.ErrorResponse{Error: "Not authenticated"})
+			}
+			c.Locals("user", user)
 		}
 
 		membership, err := q.GetUserMembership(c.Context(), user.UserId)
 		if err != nil || roleRank[membership.Role] < roleRank[minRole] {
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error": "This action requires " + string(minRole) + " access.",
+			return c.Status(fiber.StatusForbidden).JSON(dto.ErrorResponse{
+				Error: "This action requires " + string(minRole) + " access.",
 			})
 		}
 
-		c.Locals("user", user)
 		c.Locals("membership", &membership)
 		return c.Next()
 	}
