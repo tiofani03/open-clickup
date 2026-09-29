@@ -104,3 +104,55 @@ FROM "Activity" a
 JOIN "User" u ON a."userId" = u.id
 WHERE a."taskId" = $1
 ORDER BY a."createdAt" DESC;
+
+-- name: ListTaskWatchers :many
+SELECT tw."taskId", tw."userId",
+       u.name as user_name, u.email as user_email, u.color as user_color, u."avatarUrl" as user_avatar_url
+FROM "TaskWatcher" tw
+JOIN "User" u ON tw."userId" = u.id
+WHERE tw."taskId" = $1;
+
+-- name: ListTaskAttachments :many
+SELECT a.id, a."taskId", a.name as file_name, a.size as file_size, a.mime as mime_type, a.url, a."createdAt"
+FROM "Attachment" a
+WHERE a."taskId" = $1
+ORDER BY a."createdAt" DESC;
+
+-- name: ListTaskTimeEntries :many
+SELECT te.id, te."taskId", te."userId", te."startedAt", te."endedAt", te.duration,
+       u.name as user_name, u.email as user_email, u.color as user_color, u."avatarUrl" as user_avatar_url
+FROM "TimeEntry" te
+JOIN "User" u ON te."userId" = u.id
+WHERE te."taskId" = $1
+ORDER BY te."startedAt" DESC;
+
+-- name: ListTaskBlockedBy :many
+SELECT td.id, td."blockerId", td."blockedId",
+       t.id as blocker_task_id, t.name as blocker_name, t."listId" as blocker_list_id,
+       s.name as status_name, s.color as status_color, s.type as status_type
+FROM "TaskDependency" td
+JOIN "Task" t ON td."blockerId" = t.id
+JOIN "Status" s ON t."statusId" = s.id
+WHERE td."blockedId" = $1;
+
+-- name: ListTaskBlocking :many
+SELECT td.id, td."blockerId", td."blockedId",
+       t.id as blocked_task_id, t.name as blocked_name, t."listId" as blocked_list_id,
+       s.name as status_name, s.color as status_color, s.type as status_type
+FROM "TaskDependency" td
+JOIN "Task" t ON td."blockedId" = t.id
+JOIN "Status" s ON t."statusId" = s.id
+WHERE td."blockerId" = $1;
+
+-- name: ListMyTasks :many
+SELECT t.id, t.name, t."listId", t.priority, t."startDate", t."dueDate",
+       s.name as status_name, s.color as status_color, s.type as status_type,
+       l.name as list_name, sp.name as space_name, sp.color as space_color
+FROM "Task" t
+JOIN "TaskAssignee" ta ON t.id = ta."taskId"
+JOIN "Status" s ON t."statusId" = s.id
+JOIN "List" l ON t."listId" = l.id
+JOIN "Space" sp ON l."spaceId" = sp.id
+WHERE ta."userId" = $1 AND t.archived = false
+ORDER BY t."dueDate" ASC NULLS LAST, t."createdAt" DESC;
+

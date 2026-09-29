@@ -104,11 +104,11 @@ export function TaskModal({
               <div className="flex items-center gap-2 border-b border-cu-border px-4 py-2.5">
                 <StatusControl
                   current={task.status}
-                  statuses={task.list.statuses}
+                  statuses={task.list?.statuses ?? []}
                   variant="badge"
                   onChange={(statusId) => update.mutate({ statusId })}
                 />
-                <span className="text-[13px] text-cu-text-tertiary">in {task.list.name}</span>
+                <span className="text-[13px] text-cu-text-tertiary">in {task.list?.name}</span>
                 <div className="ml-auto flex items-center gap-1">
                   <TaskMenu taskId={taskId} defaultName={task.name} listId={listId} onOpenTask={onOpenTask} />
                   <button aria-label="Expand" className="rounded p-1.5 text-cu-text-tertiary hover:bg-cu-hover">
@@ -144,12 +144,12 @@ export function TaskModal({
                   <section className="mt-6">
                     <h3 className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-cu-text-secondary">
                       <SquareCheckBig className="h-4 w-4" /> Subtasks
-                      {task.subtasks.length > 0 && (
-                        <span className="text-cu-text-tertiary">{task.subtasks.length}</span>
+                      {(task.subtasks ?? []).length > 0 && (
+                        <span className="text-cu-text-tertiary">{(task.subtasks ?? []).length}</span>
                       )}
                     </h3>
                     <div className="rounded-lg border border-cu-border">
-                      {task.subtasks.map((sub) => (
+                      {(task.subtasks ?? []).map((sub) => (
                         <button
                           key={sub.id}
                           onClick={() => onOpenTask?.(sub.id)}
@@ -159,7 +159,7 @@ export function TaskModal({
                           <StatusCircle status={sub.status} size={14} />
                           <span className="text-[13px]">{sub.name}</span>
                           <div className="ml-auto flex -space-x-1.5">
-                            {sub.assignees.map((a) => (
+                            {(sub.assignees ?? []).map((a) => (
                               <Avatar key={a.userId} user={a.user} size="sm" ring />
                             ))}
                           </div>
@@ -169,22 +169,22 @@ export function TaskModal({
                     </div>
                   </section>
 
-                  <Checklists taskId={taskId} checklists={task.checklists} onChange={invalidate} />
+                  <Checklists taskId={taskId} checklists={task.checklists ?? []} onChange={invalidate} />
 
-                  <Attachments taskId={taskId} attachments={task.attachments} onChange={invalidate} />
+                  <Attachments taskId={taskId} attachments={task.attachments ?? []} onChange={invalidate} />
 
                   <TimeTracking
                     taskId={taskId}
                     currentUserId={currentUser.id}
                     timeEstimate={task.timeEstimate}
-                    entries={task.timeEntries}
+                    entries={task.timeEntries ?? []}
                     onChange={invalidate}
                   />
 
                   <Dependencies
                     taskId={taskId}
-                    blockedBy={task.blockedBy}
-                    blocking={task.blocking}
+                    blockedBy={task.blockedBy ?? []}
+                    blocking={task.blocking ?? []}
                     onChange={invalidate}
                   />
 
@@ -193,9 +193,9 @@ export function TaskModal({
                     <h3 className="mb-3 text-[13px] font-semibold text-cu-text-secondary">Activity</h3>
                     <ActivityFeed
                       taskId={taskId}
-                      comments={task.comments}
-                      activities={task.activities}
-                      statuses={task.list.statuses}
+                      comments={task.comments ?? []}
+                      activities={task.activities ?? []}
+                      statuses={task.list?.statuses ?? []}
                       members={workspace.members.map((m) => m.user)}
                       currentUserId={currentUser.id}
                       mentions={mentions}
@@ -214,7 +214,7 @@ export function TaskModal({
                 <aside className="w-full shrink-0 overflow-y-auto border-t border-cu-border bg-cu-sidebar/40 p-4 md:w-[320px] md:border-l md:border-t-0">
                   <DetailRow icon={<UserGlyph />} label="Assignees">
                     <AssigneeControl
-                      assignees={task.assignees.map((a) => a.user)}
+                      assignees={(task.assignees ?? []).map((a) => a.user)}
                       onChange={(ids) => update.mutate({ assigneeIds: ids })}
                       size="md"
                     />
@@ -251,15 +251,15 @@ export function TaskModal({
 
                   <DetailRow icon={<TagIcon className="h-4 w-4" />} label="Tags">
                     <TagControl
-                      spaceId={task.list.spaceId}
-                      selected={task.tags}
+                      spaceId={task.list?.spaceId ?? ""}
+                      selected={task.tags ?? []}
                       onChange={(tagIds) => update.mutate({ tagIds })}
                     />
                   </DetailRow>
 
                   <DetailRow icon={<Eye className="h-4 w-4" />} label="Watchers">
                     <AssigneeControl
-                      assignees={task.watchers.map((w) => w.user)}
+                      assignees={(task.watchers ?? []).map((w) => w.user)}
                       onChange={(ids) => update.mutate({ watcherIds: ids })}
                       size="md"
                       label="Watchers"
@@ -267,16 +267,16 @@ export function TaskModal({
                   </DetailRow>
 
                   {/* custom fields */}
-                  {task.list.customFields.length > 0 && (
+                  {(task.list?.customFields ?? []).length > 0 && (
                     <div className="mt-4 border-t border-cu-border pt-4">
                       <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-cu-text-tertiary">
                         Custom Fields
                       </div>
-                      {task.list.customFields.map((f) => (
+                      {(task.list?.customFields ?? []).map((f) => (
                         <DetailRow key={f.id} icon={<Plus className="h-4 w-4 opacity-0" />} label={f.name}>
                           <CustomFieldControl
                             field={f}
-                            value={task.customFieldValues.find((cv) => cv.customFieldId === f.id)?.value}
+                            value={(task.customFieldValues ?? []).find((cv) => cv.customFieldId === f.id)?.value}
                             onChange={(value) => setField.mutate({ fieldId: f.id, value })}
                           />
                         </DetailRow>

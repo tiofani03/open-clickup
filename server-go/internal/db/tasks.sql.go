@@ -274,6 +274,67 @@ func (q *Queries) ListActivitiesByTask(ctx context.Context, taskid string) ([]Li
 	return items, nil
 }
 
+const listMyTasks = `-- name: ListMyTasks :many
+SELECT t.id, t.name, t."listId", t.priority, t."startDate", t."dueDate",
+       s.name as status_name, s.color as status_color, s.type as status_type,
+       l.name as list_name, sp.name as space_name, sp.color as space_color
+FROM "Task" t
+JOIN "TaskAssignee" ta ON t.id = ta."taskId"
+JOIN "Status" s ON t."statusId" = s.id
+JOIN "List" l ON t."listId" = l.id
+JOIN "Space" sp ON l."spaceId" = sp.id
+WHERE ta."userId" = $1 AND t.archived = false
+ORDER BY t."dueDate" ASC NULLS LAST, t."createdAt" DESC
+`
+
+type ListMyTasksRow struct {
+	ID          string           `json:"id"`
+	Name        string           `json:"name"`
+	ListId      string           `json:"listId"`
+	Priority    NullPriority     `json:"priority"`
+	StartDate   pgtype.Timestamp `json:"startDate"`
+	DueDate     pgtype.Timestamp `json:"dueDate"`
+	StatusName  string           `json:"status_name"`
+	StatusColor string           `json:"status_color"`
+	StatusType  StatusType       `json:"status_type"`
+	ListName    string           `json:"list_name"`
+	SpaceName   string           `json:"space_name"`
+	SpaceColor  string           `json:"space_color"`
+}
+
+func (q *Queries) ListMyTasks(ctx context.Context, userid string) ([]ListMyTasksRow, error) {
+	rows, err := q.db.Query(ctx, listMyTasks, userid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMyTasksRow{}
+	for rows.Next() {
+		var i ListMyTasksRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ListId,
+			&i.Priority,
+			&i.StartDate,
+			&i.DueDate,
+			&i.StatusName,
+			&i.StatusColor,
+			&i.StatusType,
+			&i.ListName,
+			&i.SpaceName,
+			&i.SpaceColor,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSubtasksByParent = `-- name: ListSubtasksByParent :many
 SELECT t.id, t."listId", t."statusId", t."parentId", t.name, t.description, t.priority,
        t."position", t."startDate", t."dueDate", t."timeEstimate", t."createdById",
@@ -393,6 +454,155 @@ func (q *Queries) ListTaskAssignees(ctx context.Context, taskid string) ([]ListT
 	return items, nil
 }
 
+const listTaskAttachments = `-- name: ListTaskAttachments :many
+SELECT a.id, a."taskId", a.name as file_name, a.size as file_size, a.mime as mime_type, a.url, a."createdAt"
+FROM "Attachment" a
+WHERE a."taskId" = $1
+ORDER BY a."createdAt" DESC
+`
+
+type ListTaskAttachmentsRow struct {
+	ID        string           `json:"id"`
+	TaskId    string           `json:"taskId"`
+	FileName  string           `json:"file_name"`
+	FileSize  int32            `json:"file_size"`
+	MimeType  string           `json:"mime_type"`
+	Url       string           `json:"url"`
+	CreatedAt pgtype.Timestamp `json:"createdAt"`
+}
+
+func (q *Queries) ListTaskAttachments(ctx context.Context, taskid string) ([]ListTaskAttachmentsRow, error) {
+	rows, err := q.db.Query(ctx, listTaskAttachments, taskid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTaskAttachmentsRow{}
+	for rows.Next() {
+		var i ListTaskAttachmentsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TaskId,
+			&i.FileName,
+			&i.FileSize,
+			&i.MimeType,
+			&i.Url,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskBlockedBy = `-- name: ListTaskBlockedBy :many
+SELECT td.id, td."blockerId", td."blockedId",
+       t.id as blocker_task_id, t.name as blocker_name, t."listId" as blocker_list_id,
+       s.name as status_name, s.color as status_color, s.type as status_type
+FROM "TaskDependency" td
+JOIN "Task" t ON td."blockerId" = t.id
+JOIN "Status" s ON t."statusId" = s.id
+WHERE td."blockedId" = $1
+`
+
+type ListTaskBlockedByRow struct {
+	ID            string     `json:"id"`
+	BlockerId     string     `json:"blockerId"`
+	BlockedId     string     `json:"blockedId"`
+	BlockerTaskID string     `json:"blocker_task_id"`
+	BlockerName   string     `json:"blocker_name"`
+	BlockerListID string     `json:"blocker_list_id"`
+	StatusName    string     `json:"status_name"`
+	StatusColor   string     `json:"status_color"`
+	StatusType    StatusType `json:"status_type"`
+}
+
+func (q *Queries) ListTaskBlockedBy(ctx context.Context, blockedid string) ([]ListTaskBlockedByRow, error) {
+	rows, err := q.db.Query(ctx, listTaskBlockedBy, blockedid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTaskBlockedByRow{}
+	for rows.Next() {
+		var i ListTaskBlockedByRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.BlockerId,
+			&i.BlockedId,
+			&i.BlockerTaskID,
+			&i.BlockerName,
+			&i.BlockerListID,
+			&i.StatusName,
+			&i.StatusColor,
+			&i.StatusType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskBlocking = `-- name: ListTaskBlocking :many
+SELECT td.id, td."blockerId", td."blockedId",
+       t.id as blocked_task_id, t.name as blocked_name, t."listId" as blocked_list_id,
+       s.name as status_name, s.color as status_color, s.type as status_type
+FROM "TaskDependency" td
+JOIN "Task" t ON td."blockedId" = t.id
+JOIN "Status" s ON t."statusId" = s.id
+WHERE td."blockerId" = $1
+`
+
+type ListTaskBlockingRow struct {
+	ID            string     `json:"id"`
+	BlockerId     string     `json:"blockerId"`
+	BlockedId     string     `json:"blockedId"`
+	BlockedTaskID string     `json:"blocked_task_id"`
+	BlockedName   string     `json:"blocked_name"`
+	BlockedListID string     `json:"blocked_list_id"`
+	StatusName    string     `json:"status_name"`
+	StatusColor   string     `json:"status_color"`
+	StatusType    StatusType `json:"status_type"`
+}
+
+func (q *Queries) ListTaskBlocking(ctx context.Context, blockerid string) ([]ListTaskBlockingRow, error) {
+	rows, err := q.db.Query(ctx, listTaskBlocking, blockerid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTaskBlockingRow{}
+	for rows.Next() {
+		var i ListTaskBlockingRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.BlockerId,
+			&i.BlockedId,
+			&i.BlockedTaskID,
+			&i.BlockedName,
+			&i.BlockedListID,
+			&i.StatusName,
+			&i.StatusColor,
+			&i.StatusType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTaskTags = `-- name: ListTaskTags :many
 SELECT tt."taskId", tt."tagId",
        tg.name as tag_name, tg.color as tag_color
@@ -422,6 +632,103 @@ func (q *Queries) ListTaskTags(ctx context.Context, taskid string) ([]ListTaskTa
 			&i.TagId,
 			&i.TagName,
 			&i.TagColor,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskTimeEntries = `-- name: ListTaskTimeEntries :many
+SELECT te.id, te."taskId", te."userId", te."startedAt", te."endedAt", te.duration,
+       u.name as user_name, u.email as user_email, u.color as user_color, u."avatarUrl" as user_avatar_url
+FROM "TimeEntry" te
+JOIN "User" u ON te."userId" = u.id
+WHERE te."taskId" = $1
+ORDER BY te."startedAt" DESC
+`
+
+type ListTaskTimeEntriesRow struct {
+	ID            string           `json:"id"`
+	TaskId        string           `json:"taskId"`
+	UserId        string           `json:"userId"`
+	StartedAt     pgtype.Timestamp `json:"startedAt"`
+	EndedAt       pgtype.Timestamp `json:"endedAt"`
+	Duration      int32            `json:"duration"`
+	UserName      string           `json:"user_name"`
+	UserEmail     string           `json:"user_email"`
+	UserColor     string           `json:"user_color"`
+	UserAvatarUrl pgtype.Text      `json:"user_avatar_url"`
+}
+
+func (q *Queries) ListTaskTimeEntries(ctx context.Context, taskid string) ([]ListTaskTimeEntriesRow, error) {
+	rows, err := q.db.Query(ctx, listTaskTimeEntries, taskid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTaskTimeEntriesRow{}
+	for rows.Next() {
+		var i ListTaskTimeEntriesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TaskId,
+			&i.UserId,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.Duration,
+			&i.UserName,
+			&i.UserEmail,
+			&i.UserColor,
+			&i.UserAvatarUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskWatchers = `-- name: ListTaskWatchers :many
+SELECT tw."taskId", tw."userId",
+       u.name as user_name, u.email as user_email, u.color as user_color, u."avatarUrl" as user_avatar_url
+FROM "TaskWatcher" tw
+JOIN "User" u ON tw."userId" = u.id
+WHERE tw."taskId" = $1
+`
+
+type ListTaskWatchersRow struct {
+	TaskId        string      `json:"taskId"`
+	UserId        string      `json:"userId"`
+	UserName      string      `json:"user_name"`
+	UserEmail     string      `json:"user_email"`
+	UserColor     string      `json:"user_color"`
+	UserAvatarUrl pgtype.Text `json:"user_avatar_url"`
+}
+
+func (q *Queries) ListTaskWatchers(ctx context.Context, taskid string) ([]ListTaskWatchersRow, error) {
+	rows, err := q.db.Query(ctx, listTaskWatchers, taskid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTaskWatchersRow{}
+	for rows.Next() {
+		var i ListTaskWatchersRow
+		if err := rows.Scan(
+			&i.TaskId,
+			&i.UserId,
+			&i.UserName,
+			&i.UserEmail,
+			&i.UserColor,
+			&i.UserAvatarUrl,
 		); err != nil {
 			return nil, err
 		}

@@ -347,23 +347,199 @@ func (h *TasksHandler) GetTask(c *fiber.Ctx) error {
 		}
 	}
 
+	watchers, _ := h.q.ListTaskWatchers(ctx, taskID)
+	watcherList := make([]dto.TaskWatcherResponse, len(watchers))
+	for wi, w := range watchers {
+		watcherList[wi] = dto.TaskWatcherResponse{
+			User: dto.UserResponse{
+				ID:        w.UserId,
+				Name:      w.UserName,
+				Email:     w.UserEmail,
+				Color:     w.UserColor,
+				AvatarURL: textOrNil(w.UserAvatarUrl),
+			},
+		}
+	}
+
+	attachments, _ := h.q.ListTaskAttachments(ctx, taskID)
+	attachmentList := make([]dto.TaskAttachmentResponse, len(attachments))
+	for ai, a := range attachments {
+		attachmentList[ai] = dto.TaskAttachmentResponse{
+			ID:        a.ID,
+			TaskID:    a.TaskId,
+			FileName:  a.FileName,
+			FileSize:  int64(a.FileSize),
+			MimeType:  a.MimeType,
+			URL:       a.Url,
+			CreatedAt: a.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+		}
+	}
+
+	timeEntries, _ := h.q.ListTaskTimeEntries(ctx, taskID)
+	timeEntryList := make([]dto.TaskTimeEntryResponse, len(timeEntries))
+	for ti, te := range timeEntries {
+		var endedAt *string
+		if te.EndedAt.Valid {
+			s := te.EndedAt.Time.Format("2006-01-02T15:04:05.000Z")
+			endedAt = &s
+		}
+		var dur *int32
+		d := te.Duration
+		dur = &d
+
+		timeEntryList[ti] = dto.TaskTimeEntryResponse{
+			ID:        te.ID,
+			TaskID:    te.TaskId,
+			UserID:    te.UserId,
+			StartedAt: te.StartedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+			EndedAt:   endedAt,
+			Duration:  dur,
+			User: dto.UserResponse{
+				ID:        te.UserId,
+				Name:      te.UserName,
+				Email:     te.UserEmail,
+				Color:     te.UserColor,
+				AvatarURL: textOrNil(te.UserAvatarUrl),
+			},
+		}
+	}
+
+	blockedBy, _ := h.q.ListTaskBlockedBy(ctx, taskID)
+	blockedByList := make([]dto.TaskBlockedByResponse, len(blockedBy))
+	for bi, b := range blockedBy {
+		blockedByList[bi] = dto.TaskBlockedByResponse{
+			Blocker: dto.TaskDependencyBlockerItem{
+				ID:     b.BlockerTaskID,
+				Name:   b.BlockerName,
+				ListID: b.BlockerListID,
+				Status: dto.StatusResponse{
+					Name:  b.StatusName,
+					Color: b.StatusColor,
+					Type:  string(b.StatusType),
+				},
+			},
+		}
+	}
+
+	blocking, _ := h.q.ListTaskBlocking(ctx, taskID)
+	blockingList := make([]dto.TaskBlockingResponse, len(blocking))
+	for bi, b := range blocking {
+		blockingList[bi] = dto.TaskBlockingResponse{
+			Blocked: dto.TaskDependencyBlockerItem{
+				ID:     b.BlockedTaskID,
+				Name:   b.BlockedName,
+				ListID: b.BlockedListID,
+				Status: dto.StatusResponse{
+					Name:  b.StatusName,
+					Color: b.StatusColor,
+					Type:  string(b.StatusType),
+				},
+			},
+		}
+	}
+
+	var createdBy *dto.UserResponse
+	if task.CreatedById.Valid && task.CreatedById.String != "" {
+		if u, err := h.q.GetUserByID(ctx, task.CreatedById.String); err == nil {
+			createdBy = &dto.UserResponse{
+				ID:        u.ID,
+				Name:      u.Name,
+				Email:     u.Email,
+				Color:     u.Color,
+				AvatarURL: textOrNil(u.AvatarUrl),
+			}
+		}
+	}
+
+	listStatuses, _ := h.q.ListStatusesByList(ctx, task.ListId)
+	statusList := make([]dto.StatusResponse, len(listStatuses))
+	for si, s := range listStatuses {
+		statusList[si] = dto.StatusResponse{
+			ID:       s.ID,
+			ListID:   s.ListId,
+			Name:     s.Name,
+			Color:    s.Color,
+			Type:     string(s.Type),
+			Position: s.Position,
+		}
+	}
+
 	formatted.Count.Comments = len(commentList)
 	formatted.Count.Checklists = len(checklistList)
 
 	return c.JSON(dto.TaskDetailResponse{
 		TaskResponse: formatted,
-		List: dto.TaskListMetaResponse{
-			ID:   task.ListId,
-			Name: task.ListName,
+		CreatedBy:    createdBy,
+		Watchers:     watcherList,
+		Attachments:  attachmentList,
+		TimeEntries:  timeEntryList,
+		BlockedBy:    blockedByList,
+		Blocking:     blockingList,
+		Checklists:   checklistList,
+		Comments:     commentList,
+		Activities:   activityList,
+		List: dto.TaskListDetailResponse{
+			ID:           task.ListId,
+			Name:         task.ListName,
+			SpaceID:      task.SpaceID,
+			Statuses:     statusList,
+			CustomFields: []interface{}{},
 		},
 		Space: dto.SpaceMetaResponse{
 			ID:   task.SpaceID,
 			Name: task.SpaceName,
 		},
-		Checklists: checklistList,
-		Comments:   commentList,
-		Activities: activityList,
 	})
+}
+
+func (h *TasksHandler) GetMyTasks(c *fiber.Ctx) error {
+	user := c.Locals("user").(*db.GetSessionWithUserRow)
+	ctx := c.Context()
+
+	tasks, err := h.q.ListMyTasks(ctx, user.UserId)
+	if err != nil {
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
+	}
+
+	result := make([]dto.MyTaskResponse, len(tasks))
+	for i, t := range tasks {
+		var prio *string
+		if t.Priority.Valid {
+			p := string(t.Priority.Priority)
+			prio = &p
+		}
+		var startStr, dueStr *string
+		if t.StartDate.Valid {
+			s := t.StartDate.Time.Format("2006-01-02T15:04:05.000Z")
+			startStr = &s
+		}
+		if t.DueDate.Valid {
+			s := t.DueDate.Time.Format("2006-01-02T15:04:05.000Z")
+			dueStr = &s
+		}
+		result[i] = dto.MyTaskResponse{
+			ID:        t.ID,
+			Name:      t.Name,
+			ListID:    t.ListId,
+			Priority:  prio,
+			StartDate: startStr,
+			DueDate:   dueStr,
+			Status: dto.MyTaskStatusResponse{
+				Name:  t.StatusName,
+				Color: t.StatusColor,
+				Type:  string(t.StatusType),
+			},
+			List: dto.MyTaskListResponse{
+				Name: t.ListName,
+				Space: dto.MyTaskSpaceResponse{
+					Name:  t.SpaceName,
+					Color: t.SpaceColor,
+				},
+			},
+		}
+	}
+
+	return c.JSON(fiber.Map{"tasks": result})
 }
 
 type UpdateTaskReq struct {
@@ -379,6 +555,7 @@ type UpdateTaskReq struct {
 	Recurrence   *string   `json:"recurrence"`
 	AssigneeIDs  *[]string `json:"assigneeIds"`
 	TagIDs       *[]string `json:"tagIds"`
+	WatcherIDs   *[]string `json:"watcherIds"`
 }
 
 func (h *TasksHandler) UpdateTask(c *fiber.Ctx) error {
@@ -533,6 +710,14 @@ func (h *TasksHandler) UpdateTask(c *fiber.Ctx) error {
 				TaskId: taskID,
 				TagId:  tid,
 			})
+		}
+	}
+
+	// Watchers full replacement if provided
+	if req.WatcherIDs != nil {
+		_, _ = h.pool.Exec(ctx, `DELETE FROM "TaskWatcher" WHERE "taskId" = $1`, taskID)
+		for _, uid := range *req.WatcherIDs {
+			_, _ = h.pool.Exec(ctx, `INSERT INTO "TaskWatcher" ("taskId", "userId") VALUES ($1, $2) ON CONFLICT DO NOTHING`, taskID, uid)
 		}
 	}
 

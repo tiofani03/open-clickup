@@ -116,6 +116,7 @@ func main() {
 
 	// Tasks
 	taskH := handlers.NewTasksHandler(pool, q)
+	api.Get("/me/tasks", auth.RequireUser(q), taskH.GetMyTasks)
 	tasks := api.Group("/tasks", auth.RequireUser(q))
 	tasks.Post("/", auth.RequireRole(q, db.MemberRoleMEMBER), taskH.CreateTask)
 	tasks.Post("/bulk", auth.RequireRole(q, db.MemberRoleMEMBER), taskH.BulkTasks)
