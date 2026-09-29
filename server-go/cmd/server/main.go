@@ -138,6 +138,19 @@ func main() {
 	checklistItems.Patch("/:itemId", checklistH.UpdateItem)
 	checklistItems.Delete("/:itemId", checklistH.DeleteItem)
 
+	// Docs & Doc Pages
+	docH := handlers.NewDocsHandler(pool, q)
+	docs := api.Group("/docs", auth.RequireUser(q))
+	docs.Get("/", docH.ListDocs)
+	docs.Post("/", auth.RequireRole(q, db.MemberRoleMEMBER), docH.CreateDoc)
+	docs.Get("/:docId", docH.GetDoc)
+	docs.Patch("/:docId", auth.RequireRole(q, db.MemberRoleMEMBER), docH.UpdateDoc)
+	docs.Delete("/:docId", auth.RequireRole(q, db.MemberRoleMEMBER), docH.DeleteDoc)
+	docs.Post("/:docId/pages", auth.RequireRole(q, db.MemberRoleMEMBER), docH.CreateDocPage)
+	docs.Get("/:docId/pages/:pageId", docH.GetDocPage)
+	docs.Patch("/:docId/pages/:pageId", auth.RequireRole(q, db.MemberRoleMEMBER), docH.UpdateDocPage)
+	docs.Delete("/:docId/pages/:pageId", auth.RequireRole(q, db.MemberRoleMEMBER), docH.DeleteDocPage)
+
 	// In production, serve built SPA from ./dist
 	if os.Getenv("NODE_ENV") == "production" {
 		app.Static("/", "./dist")
