@@ -79,6 +79,10 @@ func toDocPageResponse(p db.DocPage) dto.DocPageResponse {
 		Position:        p.Position,
 		CreatedAt:       formatTimestamptz(p.CreatedAt),
 		UpdatedAt:       formatTimestamptz(p.UpdatedAt),
+		IsPublished:     p.IsPublished,
+		HasDraft:        p.HasDraft,
+		DraftMarkdown:   textOrNil(p.DraftMarkdown),
+		DraftHTML:       textOrNil(p.DraftHtml),
 	}
 }
 
@@ -95,6 +99,8 @@ func toDocPageResponseFromRow(p db.ListDocPagesByDocIDRow) dto.DocPageResponse {
 		Position:        p.Position,
 		CreatedAt:       formatTimestamptz(p.CreatedAt),
 		UpdatedAt:       formatTimestamptz(p.UpdatedAt),
+		IsPublished:     p.IsPublished,
+		HasDraft:        p.HasDraft,
 	}
 }
 
@@ -467,6 +473,10 @@ func (h *DocsHandler) UpdateDocPage(c *fiber.Ctx) error {
 		CoverImage:      stringPtrToText(req.CoverImage),
 		Position:        floatPtrToFloat8(req.Position),
 		ParentPageID:    foreignKeyText(req.ParentPageID),
+		IsPublished:     boolPtrToBool(req.IsPublished),
+		HasDraft:        boolPtrToBool(req.HasDraft),
+		DraftMarkdown:   stringPtrToText(req.DraftMarkdown),
+		DraftHtml:       stringPtrToText(req.DraftHTML),
 	})
 	if err != nil {
 		return sendError(c, fiber.StatusInternalServerError, err.Error())
@@ -475,6 +485,48 @@ func (h *DocsHandler) UpdateDocPage(c *fiber.Ctx) error {
 	realtime.DefaultHub.Broadcast(realtime.Event{Type: "doc"})
 
 	return c.JSON(toDocPageResponse(updatedPage))
+}
+
+// PublishDocPage POST /api/docs/:docId/pages/:pageId/publish -> publishes draft to live content
+func (h *DocsHandler) PublishDocPage(c *fiber.Ctx) error {
+	docID := c.Params("docId")
+	pageID := c.Params("pageId")
+	ctx := c.Context()
+
+	page, err := h.q.GetDocPageByID(ctx, pageID)
+	if err != nil || page.DocID != docID {
+		return sendError(c, fiber.StatusNotFound, "Page not found")
+	}
+
+	publishedPage, err := h.q.PublishDocPage(ctx, pageID)
+	if err != nil {
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
+	}
+
+	realtime.DefaultHub.Broadcast(realtime.Event{Type: "doc"})
+
+	return c.JSON(toDocPageResponse(publishedPage))
+}
+
+// DiscardDocPageDraft POST /api/docs/:docId/pages/:pageId/discard-draft -> discards active draft
+func (h *DocsHandler) DiscardDocPageDraft(c *fiber.Ctx) error {
+	docID := c.Params("docId")
+	pageID := c.Params("pageId")
+	ctx := c.Context()
+
+	page, err := h.q.GetDocPageByID(ctx, pageID)
+	if err != nil || page.DocID != docID {
+		return sendError(c, fiber.StatusNotFound, "Page not found")
+	}
+
+	discardedPage, err := h.q.DiscardDocPageDraft(ctx, pageID)
+	if err != nil {
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
+	}
+
+	realtime.DefaultHub.Broadcast(realtime.Event{Type: "doc"})
+
+	return c.JSON(toDocPageResponse(discardedPage))
 }
 
 // DeleteDocPage DELETE /api/docs/:docId/pages/:pageId -> deletes page.
@@ -489,6 +541,121 @@ func (h *DocsHandler) DeleteDocPage(c *fiber.Ctx) error {
 	}
 
 	if err := h.q.DeleteDocPage(ctx, pageID); err != nil {
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
+	}
+
+	realtime.DefaultHub.Broadcast(realtime.Event{Type: "doc"})
+
+	return c.JSON(dto.OKResponse{OK: true})
+}
+
+// ListDocComments GET /api/docs/:docId/pages/:pageId/comments -> returns comments for page
+func (h *DocsHandler) ListDocComments(c *fiber.Ctx) error {
+	docID := c.Params("docId")
+	pageID := c.Params("pageId")
+	ctx := c.Context()
+
+	page, err := h.q.GetDocPageByID(ctx, pageID)
+	if err != nil || page.DocID != docID {
+		return sendError(c, fiber.StatusNotFound, "Page not found")
+	}
+
+	rows, err := h.q.ListDocCommentsByPage(ctx, pageID)
+	if err != nil {
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
+	}
+
+	res := make([]dto.DocCommentResponse, 0, len(rows))
+	for _, row := range rows {
+		res = append(res, dto.DocCommentResponse{
+			ID:        row.ID,
+			DocPageID: row.DocPageID,
+			UserID:    row.UserID,
+			Body:      row.Body,
+			ParentID:  textOrNil(row.ParentID),
+			CreatedAt: formatTimestamptz(row.CreatedAt),
+			UpdatedAt: formatTimestamptz(row.UpdatedAt),
+			User: &dto.UserResponse{
+				ID:        row.UserID,
+				Email:     row.UserEmail,
+				Name:      row.UserName,
+				Color:     row.UserColor,
+				AvatarURL: textOrNil(row.UserAvatarUrl),
+			},
+		})
+	}
+
+	return c.JSON(res)
+}
+
+// CreateDocComment POST /api/docs/:docId/pages/:pageId/comments -> adds a comment to page
+func (h *DocsHandler) CreateDocComment(c *fiber.Ctx) error {
+	docID := c.Params("docId")
+	pageID := c.Params("pageId")
+	ctx := c.Context()
+	userID, _ := c.Locals("userId").(string)
+	if userID == "" {
+		return sendError(c, fiber.StatusUnauthorized, "Unauthorized")
+	}
+
+	page, err := h.q.GetDocPageByID(ctx, pageID)
+	if err != nil || page.DocID != docID {
+		return sendError(c, fiber.StatusNotFound, "Page not found")
+	}
+
+	var req dto.CreateDocCommentRequest
+	if err := c.BodyParser(&req); err != nil {
+		return sendError(c, fiber.StatusBadRequest, "Invalid request body")
+	}
+
+	body := strings.TrimSpace(req.Body)
+	if body == "" {
+		return sendError(c, fiber.StatusBadRequest, "Comment body cannot be empty")
+	}
+
+	commentID := cuid()
+	comment, err := h.q.CreateDocComment(ctx, db.CreateDocCommentParams{
+		ID:        commentID,
+		DocPageID: pageID,
+		UserID:    userID,
+		Body:      body,
+		ParentID:  foreignKeyText(req.ParentID),
+	})
+	if err != nil {
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
+	}
+
+	var userResp *dto.UserResponse
+	if u, err := h.q.GetUserByID(ctx, userID); err == nil {
+		userResp = &dto.UserResponse{
+			ID:        u.ID,
+			Email:     u.Email,
+			Name:      u.Name,
+			Color:     u.Color,
+			AvatarURL: textOrNil(u.AvatarUrl),
+		}
+	}
+
+	realtime.DefaultHub.Broadcast(realtime.Event{Type: "doc"})
+
+	return c.Status(fiber.StatusCreated).JSON(dto.DocCommentResponse{
+		ID:        comment.ID,
+		DocPageID: comment.DocPageID,
+		UserID:    comment.UserID,
+		Body:      comment.Body,
+		ParentID:  textOrNil(comment.ParentID),
+		CreatedAt: formatTimestamptz(comment.CreatedAt),
+		UpdatedAt: formatTimestamptz(comment.UpdatedAt),
+		User:      userResp,
+	})
+}
+
+// DeleteDocComment DELETE /api/docs/:docId/pages/:pageId/comments/:commentId -> deletes comment
+func (h *DocsHandler) DeleteDocComment(c *fiber.Ctx) error {
+	commentID := c.Params("commentId")
+	ctx := c.Context()
+
+	if err := h.q.DeleteDocComment(ctx, commentID); err != nil {
 		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 

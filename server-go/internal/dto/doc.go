@@ -27,6 +27,10 @@ type DocPageResponse struct {
 	Position        float64 `json:"position"`
 	CreatedAt       string  `json:"createdAt"`
 	UpdatedAt       string  `json:"updatedAt"`
+	IsPublished     bool    `json:"isPublished"`
+	HasDraft        bool    `json:"hasDraft"`
+	DraftMarkdown   *string `json:"draftMarkdown,omitempty"`
+	DraftHTML       *string `json:"draftHtml,omitempty"`
 }
 
 type DocDetailResponse struct {
@@ -69,4 +73,24 @@ type UpdateDocPageRequest struct {
 	CoverImage      *string  `json:"coverImage"`
 	Position        *float64 `json:"position"`
 	ParentPageID    *string  `json:"parentPageId"`
+	IsPublished     *bool    `json:"isPublished"`
+	HasDraft        *bool    `json:"hasDraft"`
+	DraftMarkdown   *string  `json:"draftMarkdown"`
+	DraftHTML       *string  `json:"draftHtml"`
+}
+
+type DocCommentResponse struct {
+	ID        string        `json:"id"`
+	DocPageID string        `json:"docPageId"`
+	UserID    string        `json:"userId"`
+	Body      string        `json:"body"`
+	ParentID  *string       `json:"parentId"`
+	CreatedAt string        `json:"createdAt"`
+	UpdatedAt string        `json:"updatedAt"`
+	User      *UserResponse `json:"user,omitempty"`
+}
+
+type CreateDocCommentRequest struct {
+	Body     string  `json:"body"`
+	ParentID *string `json:"parentId"`
 }

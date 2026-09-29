@@ -156,6 +156,11 @@ func main() {
 	docs.Get("/:docId/pages/:pageId", docH.GetDocPage)
 	docs.Patch("/:docId/pages/:pageId", auth.RequireRole(q, db.MemberRoleMEMBER), docH.UpdateDocPage)
 	docs.Delete("/:docId/pages/:pageId", auth.RequireRole(q, db.MemberRoleMEMBER), docH.DeleteDocPage)
+	docs.Post("/:docId/pages/:pageId/publish", auth.RequireRole(q, db.MemberRoleMEMBER), docH.PublishDocPage)
+	docs.Post("/:docId/pages/:pageId/discard-draft", auth.RequireRole(q, db.MemberRoleMEMBER), docH.DiscardDocPageDraft)
+	docs.Get("/:docId/pages/:pageId/comments", docH.ListDocComments)
+	docs.Post("/:docId/pages/:pageId/comments", auth.RequireRole(q, db.MemberRoleMEMBER), docH.CreateDocComment)
+	docs.Delete("/:docId/pages/:pageId/comments/:commentId", auth.RequireRole(q, db.MemberRoleMEMBER), docH.DeleteDocComment)
 
 	// In production, serve built SPA from ./dist
 	if os.Getenv("NODE_ENV") == "production" {
