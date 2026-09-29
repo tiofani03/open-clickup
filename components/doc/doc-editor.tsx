@@ -10,23 +10,50 @@ import { SlashCommand } from "./slash-command";
 import { FloatingToolbar } from "./floating-toolbar";
 import { MermaidExtension } from "./mermaid/mermaid-extension";
 import { ImageExtension } from "./image/image-extension";
-import { compressImage } from "../../lib/image-compressor";
+import { compressImage, sanitizeImageName } from "../../lib/image-compressor";
+
+function showUploadToast(text: string, isError = false) {
+  if (typeof document === "undefined" || !document.body) return () => {};
+  const toast = document.createElement("div");
+  toast.className = `fixed bottom-5 right-5 z-50 flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium shadow-md transition-all ${
+    isError ? "bg-red-600 text-white" : "bg-cu-purple text-white animate-pulse"
+  }`;
+  toast.textContent = text;
+  document.body.appendChild(toast);
+  if (isError) {
+    setTimeout(() => {
+      try {
+        toast.remove();
+      } catch {
+        // ignore
+      }
+    }, 4000);
+  }
+  return () => {
+    try {
+      toast.remove();
+    } catch {
+      // ignore
+    }
+  };
+}
 
 export async function uploadAndInsertImage(file: File, editor: Editor, pos?: number) {
+  const removeStatus = showUploadToast(`Uploading ${file.name || "image"}...`);
   try {
     const compressed = await compressImage(file);
     const form = new FormData();
-    let uploadName = file.name || "image.webp";
-    if (!/\.(png|jpe?g|webp|gif|svg)$/i.test(uploadName)) {
-      uploadName = `${uploadName}.webp`;
-    }
+    const uploadName = sanitizeImageName(file.name || "image.webp");
     form.append("file", compressed, uploadName);
 
     const res = await fetch("/api/upload", {
       method: "POST",
       body: form,
     });
-    if (!res.ok) throw new Error("Upload failed");
+    if (!res.ok) {
+      const errData = typeof res.json === "function" ? await res.json().catch(() => null) : null;
+      throw new Error(errData?.error || `Upload failed with status ${res.status}`);
+    }
     const data = await res.json();
 
     const node = editor.schema.nodes.imageBlock?.create({
@@ -46,6 +73,13 @@ export async function uploadAndInsertImage(file: File, editor: Editor, pos?: num
     }
   } catch (err) {
     console.error("Failed to insert image:", err);
+    const message = err instanceof Error ? err.message : "Failed to upload image";
+    showUploadToast(message, true);
+    if (typeof window !== "undefined" && typeof window.alert === "function") {
+      window.alert(`Image upload error: ${message}`);
+    }
+  } finally {
+    removeStatus();
   }
 }
 

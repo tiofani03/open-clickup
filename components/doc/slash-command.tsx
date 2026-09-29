@@ -165,6 +165,9 @@ const COMMAND_ITEMS: CommandItem[] = [
         }
         input.remove();
       };
+      input.oncancel = () => {
+        input.remove();
+      };
       input.click();
     },
   },

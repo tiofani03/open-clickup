@@ -18,6 +18,169 @@ import {
 import * as Dialog from "@radix-ui/react-dialog";
 import { cn } from "../../../lib/utils";
 
+export interface ImageLightboxModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  src: string;
+  alt: string;
+  caption?: string;
+}
+
+export function ImageLightboxModal({
+  isOpen,
+  onClose,
+  src,
+  alt,
+  caption,
+}: ImageLightboxModalProps) {
+  const [scale, setScale] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    if (isOpen) {
+      setScale(1);
+      setPan({ x: 0, y: 0 });
+      setIsPanning(false);
+    }
+  }, [isOpen]);
+
+  const handleZoomIn = () =>
+    setScale((s) => Math.min(Number((s + 0.25).toFixed(2)), 4));
+  const handleZoomOut = () =>
+    setScale((s) => Math.max(Number((s - 0.25).toFixed(2)), 0.25));
+  const handleResetZoom = () => {
+    setScale(1);
+    setPan({ x: 0, y: 0 });
+  };
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.15 : -0.15;
+    setScale((s) =>
+      Math.max(0.25, Math.min(4, Number((s + delta).toFixed(2)))),
+    );
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    setIsPanning(true);
+    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isPanning) return;
+    setPan({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y,
+    });
+  };
+
+  const handleMouseUp = () => setIsPanning(false);
+
+  return (
+    <Dialog.Root open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150" />
+        <Dialog.Content className="fixed inset-4 sm:inset-10 z-50 m-auto flex flex-col rounded-2xl border border-cu-border bg-cu-panel shadow-2xl overflow-hidden outline-none animate-in fade-in zoom-in-95 duration-150">
+          <div className="flex h-12 shrink-0 items-center justify-between border-b border-cu-border bg-cu-subtle/30 px-4 select-none">
+            <div className="flex items-center gap-2 min-w-0 mr-4">
+              <ImageIcon className="h-4 w-4 text-cu-purple shrink-0" />
+              <Dialog.Title className="text-xs font-semibold text-cu-text truncate">
+                {caption || alt || "Image Preview"}
+              </Dialog.Title>
+              <Dialog.Description className="sr-only">
+                Image preview lightbox with zoom and pan controls
+              </Dialog.Description>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center rounded border border-cu-border bg-cu-bg">
+                <button
+                  type="button"
+                  onClick={handleZoomOut}
+                  className="p-1 text-cu-text-tertiary hover:text-cu-text hover:bg-cu-hover rounded-l transition cursor-pointer"
+                  title="Zoom out"
+                >
+                  <ZoomOut className="h-3.5 w-3.5" />
+                </button>
+                <span className="px-1.5 text-[10px] font-mono text-cu-text-tertiary min-w-[36px] text-center">
+                  {Math.round(scale * 100)}%
+                </span>
+                <button
+                  type="button"
+                  onClick={handleZoomIn}
+                  className="p-1 text-cu-text-tertiary hover:text-cu-text hover:bg-cu-hover rounded-r transition cursor-pointer"
+                  title="Zoom in"
+                >
+                  <ZoomIn className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleResetZoom}
+                className="p-1 text-cu-text-tertiary hover:text-cu-text hover:bg-cu-hover rounded transition cursor-pointer"
+                title="Reset view (1:1)"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+              </button>
+
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  className="p-1 text-cu-text-tertiary hover:text-cu-text hover:bg-cu-hover rounded transition cursor-pointer ml-1"
+                  title="Close preview (Esc)"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </Dialog.Close>
+            </div>
+          </div>
+
+          <div
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onWheel={handleWheel}
+            onDoubleClick={handleResetZoom}
+            className={cn(
+              "relative flex flex-1 items-center justify-center overflow-hidden p-6 select-none bg-cu-bg",
+              isPanning ? "cursor-grabbing" : "cursor-grab",
+            )}
+            style={{
+              backgroundImage:
+                "radial-gradient(circle at 1px 1px, var(--color-cu-border, #27272a) 1px, transparent 0)",
+              backgroundSize: "20px 20px",
+            }}
+          >
+            <img
+              src={src}
+              alt={alt || caption || "Image preview"}
+              style={{
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
+                transformOrigin: "center center",
+                transition: isPanning ? "none" : "transform 0.1s ease-out",
+                maxHeight: "80vh",
+                maxWidth: "85vw",
+                objectFit: "contain",
+              }}
+              className="select-none pointer-events-none rounded shadow-md"
+              draggable={false}
+            />
+
+            <div className="absolute bottom-3 left-4 rounded-md bg-cu-panel/80 backdrop-blur-xs border border-cu-border px-2.5 py-1 text-[11px] text-cu-text-tertiary pointer-events-none">
+              Drag to pan • Scroll or +/- to zoom • Double-click to reset • Esc to close
+            </div>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
 export function ImageBlock(props: NodeViewProps) {
   const { node, updateAttributes, deleteNode, selected, editor } = props;
   const isEditable = editor.isEditable;
@@ -41,49 +204,7 @@ export function ImageBlock(props: NodeViewProps) {
 
   // Lightbox Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalScale, setModalScale] = useState(1);
-  const [modalPan, setModalPan] = useState({ x: 0, y: 0 });
-  const [isModalPanning, setIsModalPanning] = useState(false);
-  const [modalDragStart, setModalDragStart] = useState({ x: 0, y: 0 });
-
-  const handleOpenModal = () => {
-    setModalScale(1);
-    setModalPan({ x: 0, y: 0 });
-    setIsModalOpen(true);
-  };
-
-  const handleZoomIn = () =>
-    setModalScale((s) => Math.min(Number((s + 0.25).toFixed(2)), 4));
-  const handleZoomOut = () =>
-    setModalScale((s) => Math.max(Number((s - 0.25).toFixed(2)), 0.25));
-  const handleResetZoom = () => {
-    setModalScale(1);
-    setModalPan({ x: 0, y: 0 });
-  };
-
-  const handleModalWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY < 0 ? 0.15 : -0.15;
-    setModalScale((s) =>
-      Math.max(0.25, Math.min(4, Number((s + delta).toFixed(2)))),
-    );
-  };
-
-  const handleModalMouseDown = (e: React.MouseEvent) => {
-    if (e.button !== 0) return;
-    setIsModalPanning(true);
-    setModalDragStart({ x: e.clientX - modalPan.x, y: e.clientY - modalPan.y });
-  };
-
-  const handleModalMouseMove = (e: React.MouseEvent) => {
-    if (!isModalPanning) return;
-    setModalPan({
-      x: e.clientX - modalDragStart.x,
-      y: e.clientY - modalDragStart.y,
-    });
-  };
-
-  const handleModalMouseUp = () => setIsModalPanning(false);
+  const handleOpenModal = () => setIsModalOpen(true);
 
   // Resize drag handle handler
   const handleResizeStart = (e: React.MouseEvent, direction: "left" | "right") => {
@@ -177,105 +298,13 @@ export function ImageBlock(props: NodeViewProps) {
           </div>
         </div>
 
-        {/* Lightbox Dialog Modal */}
-        <Dialog.Root open={isModalOpen} onOpenChange={setIsModalOpen}>
-          <Dialog.Portal>
-            <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150" />
-            <Dialog.Content className="fixed inset-4 sm:inset-10 z-50 m-auto flex flex-col rounded-2xl border border-cu-border bg-cu-panel shadow-2xl overflow-hidden outline-none animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex h-12 shrink-0 items-center justify-between border-b border-cu-border bg-cu-subtle/30 px-4 select-none">
-                <div className="flex items-center gap-2 min-w-0 mr-4">
-                  <ImageIcon className="h-4 w-4 text-cu-purple shrink-0" />
-                  <Dialog.Title className="text-xs font-semibold text-cu-text truncate">
-                    {caption || alt || "Image Preview"}
-                  </Dialog.Title>
-                  <Dialog.Description className="sr-only">
-                    Image preview lightbox with zoom and pan controls
-                  </Dialog.Description>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="flex items-center rounded border border-cu-border bg-cu-bg">
-                    <button
-                      type="button"
-                      onClick={handleZoomOut}
-                      className="p-1 text-cu-text-tertiary hover:text-cu-text hover:bg-cu-hover rounded-l transition cursor-pointer"
-                      title="Zoom out"
-                    >
-                      <ZoomOut className="h-3.5 w-3.5" />
-                    </button>
-                    <span className="px-1.5 text-[10px] font-mono text-cu-text-tertiary min-w-[36px] text-center">
-                      {Math.round(modalScale * 100)}%
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleZoomIn}
-                      className="p-1 text-cu-text-tertiary hover:text-cu-text hover:bg-cu-hover rounded-r transition cursor-pointer"
-                      title="Zoom in"
-                    >
-                      <ZoomIn className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleResetZoom}
-                    className="p-1 text-cu-text-tertiary hover:text-cu-text hover:bg-cu-hover rounded transition cursor-pointer"
-                    title="Reset view (1:1)"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" />
-                  </button>
-
-                  <Dialog.Close asChild>
-                    <button
-                      type="button"
-                      className="p-1 text-cu-text-tertiary hover:text-cu-text hover:bg-cu-hover rounded transition cursor-pointer ml-1"
-                      title="Close preview (Esc)"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </Dialog.Close>
-                </div>
-              </div>
-
-              <div
-                onMouseDown={handleModalMouseDown}
-                onMouseMove={handleModalMouseMove}
-                onMouseUp={handleModalMouseUp}
-                onMouseLeave={handleModalMouseUp}
-                onWheel={handleModalWheel}
-                onDoubleClick={handleResetZoom}
-                className={cn(
-                  "relative flex flex-1 items-center justify-center overflow-hidden p-6 select-none bg-cu-bg",
-                  isModalPanning ? "cursor-grabbing" : "cursor-grab",
-                )}
-                style={{
-                  backgroundImage:
-                    "radial-gradient(circle at 1px 1px, var(--color-cu-border, #27272a) 1px, transparent 0)",
-                  backgroundSize: "20px 20px",
-                }}
-              >
-                <img
-                  src={src}
-                  alt={alt || caption || "Image preview"}
-                  style={{
-                    transform: `translate(${modalPan.x}px, ${modalPan.y}px) scale(${modalScale})`,
-                    transformOrigin: "center center",
-                    transition: isModalPanning ? "none" : "transform 0.1s ease-out",
-                    maxHeight: "80vh",
-                    maxWidth: "85vw",
-                    objectFit: "contain",
-                  }}
-                  className="select-none pointer-events-none rounded shadow-md"
-                  draggable={false}
-                />
-
-                <div className="absolute bottom-3 left-4 rounded-md bg-cu-panel/80 backdrop-blur-xs border border-cu-border px-2.5 py-1 text-[11px] text-cu-text-tertiary pointer-events-none">
-                  Drag to pan • Scroll or +/- to zoom • Double-click to reset • Esc to close
-                </div>
-              </div>
-            </Dialog.Content>
-          </Dialog.Portal>
-        </Dialog.Root>
+        <ImageLightboxModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          src={src}
+          alt={alt}
+          caption={caption}
+        />
       </NodeViewWrapper>
     );
   }
@@ -477,105 +506,13 @@ export function ImageBlock(props: NodeViewProps) {
         </div>
       </div>
 
-      {/* Lightbox Dialog Modal in Edit Mode */}
-      <Dialog.Root open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs animate-in fade-in duration-150" />
-          <Dialog.Content className="fixed inset-4 sm:inset-10 z-50 m-auto flex flex-col rounded-2xl border border-cu-border bg-cu-panel shadow-2xl overflow-hidden outline-none animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex h-12 shrink-0 items-center justify-between border-b border-cu-border bg-cu-subtle/30 px-4 select-none">
-              <div className="flex items-center gap-2 min-w-0 mr-4">
-                <ImageIcon className="h-4 w-4 text-cu-purple shrink-0" />
-                <Dialog.Title className="text-xs font-semibold text-cu-text truncate">
-                  {caption || alt || "Image Preview"}
-                </Dialog.Title>
-                <Dialog.Description className="sr-only">
-                  Image preview lightbox with zoom and pan controls
-                </Dialog.Description>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <div className="flex items-center rounded border border-cu-border bg-cu-bg">
-                  <button
-                    type="button"
-                    onClick={handleZoomOut}
-                    className="p-1 text-cu-text-tertiary hover:text-cu-text hover:bg-cu-hover rounded-l transition cursor-pointer"
-                    title="Zoom out"
-                  >
-                    <ZoomOut className="h-3.5 w-3.5" />
-                  </button>
-                  <span className="px-1.5 text-[10px] font-mono text-cu-text-tertiary min-w-[36px] text-center">
-                    {Math.round(modalScale * 100)}%
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleZoomIn}
-                    className="p-1 text-cu-text-tertiary hover:text-cu-text hover:bg-cu-hover rounded-r transition cursor-pointer"
-                    title="Zoom in"
-                  >
-                    <ZoomIn className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleResetZoom}
-                  className="p-1 text-cu-text-tertiary hover:text-cu-text hover:bg-cu-hover rounded transition cursor-pointer"
-                  title="Reset view (1:1)"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                </button>
-
-                <Dialog.Close asChild>
-                  <button
-                    type="button"
-                    className="p-1 text-cu-text-tertiary hover:text-cu-text hover:bg-cu-hover rounded transition cursor-pointer ml-1"
-                    title="Close preview (Esc)"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </Dialog.Close>
-              </div>
-            </div>
-
-            <div
-              onMouseDown={handleModalMouseDown}
-              onMouseMove={handleModalMouseMove}
-              onMouseUp={handleModalMouseUp}
-              onMouseLeave={handleModalMouseUp}
-              onWheel={handleModalWheel}
-              onDoubleClick={handleResetZoom}
-              className={cn(
-                "relative flex flex-1 items-center justify-center overflow-hidden p-6 select-none bg-cu-bg",
-                isModalPanning ? "cursor-grabbing" : "cursor-grab",
-              )}
-              style={{
-                backgroundImage:
-                  "radial-gradient(circle at 1px 1px, var(--color-cu-border, #27272a) 1px, transparent 0)",
-                backgroundSize: "20px 20px",
-              }}
-            >
-              <img
-                src={src}
-                alt={alt || caption || "Image preview"}
-                style={{
-                  transform: `translate(${modalPan.x}px, ${modalPan.y}px) scale(${modalScale})`,
-                  transformOrigin: "center center",
-                  transition: isModalPanning ? "none" : "transform 0.1s ease-out",
-                  maxHeight: "80vh",
-                  maxWidth: "85vw",
-                  objectFit: "contain",
-                }}
-                className="select-none pointer-events-none rounded shadow-md"
-                draggable={false}
-              />
-
-              <div className="absolute bottom-3 left-4 rounded-md bg-cu-panel/80 backdrop-blur-xs border border-cu-border px-2.5 py-1 text-[11px] text-cu-text-tertiary pointer-events-none">
-                Drag to pan • Scroll or +/- to zoom • Double-click to reset • Esc to close
-              </div>
-            </div>
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+      <ImageLightboxModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        src={src}
+        alt={alt}
+        caption={caption}
+      />
     </NodeViewWrapper>
   );
 }

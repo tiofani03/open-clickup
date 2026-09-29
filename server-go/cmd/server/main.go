@@ -42,6 +42,7 @@ func main() {
 	q := db.New(pool)
 
 	app := fiber.New(fiber.Config{
+		BodyLimit: 20 * 1024 * 1024,
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
 			if e, ok := err.(*fiber.Error); ok {
@@ -167,7 +168,11 @@ func main() {
 	_ = os.MkdirAll(uploadDir, 0755)
 	uploadH := handlers.NewUploadHandler(uploadDir)
 	api.Post("/upload", auth.RequireUser(q), uploadH.Upload)
-	app.Static("/uploads", uploadDir)
+	app.Static("/uploads", uploadDir, fiber.Static{
+		Compress:  true,
+		ByteRange: true,
+		MaxAge:    86400 * 30,
+	})
 
 	// In production, serve built SPA from ./dist
 	if os.Getenv("NODE_ENV") == "production" {

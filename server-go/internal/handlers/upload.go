@@ -10,6 +10,25 @@ import (
 	"github.com/google/uuid"
 )
 
+const MaxUploadSize = 10 * 1024 * 1024
+
+var allowedMIMETypes = map[string]bool{
+	"image/png":     true,
+	"image/jpeg":    true,
+	"image/webp":    true,
+	"image/gif":     true,
+	"image/svg+xml": true,
+}
+
+var allowedExtensions = map[string]bool{
+	".png":  true,
+	".jpg":  true,
+	".jpeg": true,
+	".webp": true,
+	".gif":  true,
+	".svg":  true,
+}
+
 type UploadHandler struct {
 	uploadDir string
 }
@@ -30,16 +49,17 @@ func (h *UploadHandler) Upload(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Missing file in form"})
 	}
 
-	ext := strings.ToLower(filepath.Ext(file.Filename))
-	allowed := map[string]bool{
-		".png":  true,
-		".jpg":  true,
-		".jpeg": true,
-		".webp": true,
-		".gif":  true,
-		".svg":  true,
+	if file.Size > MaxUploadSize {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "File size exceeds 10MB limit"})
 	}
-	if !allowed[ext] {
+
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	if !allowedExtensions[ext] {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Unsupported file format"})
+	}
+
+	mimeType := strings.ToLower(strings.TrimSpace(strings.Split(file.Header.Get("Content-Type"), ";")[0]))
+	if !allowedMIMETypes[mimeType] {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Unsupported file format"})
 	}
 
