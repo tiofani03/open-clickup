@@ -109,6 +109,11 @@ func main() {
 	searchH := handlers.NewSearchHandler(pool)
 	api.Get("/search", auth.RequireUser(q), searchH.Search)
 
+	// Notifications
+	notifH := handlers.NewNotificationsHandler(q)
+	api.Get("/notifications", auth.RequireUser(q), notifH.GetNotifications)
+	api.Post("/notifications/read", auth.RequireUser(q), notifH.MarkRead)
+
 	// Tasks
 	taskH := handlers.NewTasksHandler(pool, q)
 	tasks := api.Group("/tasks", auth.RequireUser(q))
