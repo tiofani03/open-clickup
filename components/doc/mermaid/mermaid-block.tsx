@@ -23,7 +23,9 @@ import {
   Square,
   Circle,
   PlayCircle,
+  X,
 } from "lucide-react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { renderMermaidDiagram, generateSvgFromMermaid } from "./mermaid-renderer";
 import { cn } from "../../../lib/utils";
 
@@ -241,21 +243,160 @@ export function MermaidBlock(props: NodeViewProps) {
     handleCodeChange(nextCode);
   };
 
-  // In read-only / preview mode (not editing), display only the clean diagram without toolbar or drag/pan
+  // Modal state for full preview lightbox
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalScale, setModalScale] = useState(1);
+  const [modalPan, setModalPan] = useState({ x: 0, y: 0 });
+  const [isModalPanning, setIsModalPanning] = useState(false);
+  const [modalDragStart, setModalDragStart] = useState({ x: 0, y: 0 });
+
+  const handleOpenModal = () => {
+    setModalScale(1);
+    setModalPan({ x: 0, y: 0 });
+    setIsModalOpen(true);
+  };
+
+  // In read-only / preview mode (not editing), display clean diagram with click-to-full-preview
   if (!isEditable) {
     return (
-      <NodeViewWrapper className="my-6 flex items-center justify-center overflow-x-auto rounded-xl border border-cu-border/50 bg-cu-panel/40 p-4 transition-all">
-        {error ? (
-          <div className="rounded-lg border border-cu-urgent/30 bg-cu-urgent/10 p-4 text-center text-xs text-cu-urgent">
-            <p className="font-semibold">Mermaid Syntax Error</p>
-            <p className="mt-1 opacity-80">{error}</p>
+      <NodeViewWrapper className="my-6">
+        <div
+          onClick={handleOpenModal}
+          className="group relative flex items-center justify-center overflow-x-auto rounded-xl border border-cu-border/50 bg-cu-panel/40 p-4 transition-all hover:border-cu-purple/60 hover:bg-cu-panel/80 hover:shadow-md cursor-pointer select-none"
+          title="Click to open full preview"
+        >
+          {/* Subtle expand badge on hover */}
+          <div className="absolute top-2 right-2 flex items-center gap-1 rounded-md bg-cu-panel/90 backdrop-blur-xs border border-cu-border px-2 py-1 text-[11px] font-medium text-cu-text-secondary opacity-0 group-hover:opacity-100 transition-opacity shadow-xs pointer-events-none">
+            <Maximize2 className="h-3 w-3 text-cu-purple" />
+            <span>Full preview</span>
           </div>
-        ) : (
-          <div
-            className="flex items-center justify-center max-w-full"
-            dangerouslySetInnerHTML={{ __html: svgHtml }}
-          />
-        )}
+
+          {error ? (
+            <div className="rounded-lg border border-cu-urgent/30 bg-cu-urgent/10 p-4 text-center text-xs text-cu-urgent">
+              <p className="font-semibold">Mermaid Syntax Error</p>
+              <p className="mt-1 opacity-80">{error}</p>
+            </div>
+          ) : (
+            <div
+              className="flex items-center justify-center max-w-full"
+              dangerouslySetInnerHTML={{ __html: svgHtml }}
+            />
+          )}
+        </div>
+
+        {/* Full Preview Modal Lightbox */}
+        <Dialog.Root open={isModalOpen} onOpenChange={setIsModalOpen}>
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150" />
+            <Dialog.Content className="fixed inset-4 sm:inset-10 z-50 m-auto flex flex-col rounded-2xl border border-cu-border bg-cu-panel shadow-2xl overflow-hidden outline-none animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex h-12 shrink-0 items-center justify-between border-b border-cu-border bg-cu-subtle/30 px-4 select-none">
+                <div className="flex items-center gap-2">
+                  <Workflow className="h-4 w-4 text-cu-purple" />
+                  <Dialog.Title className="text-xs font-semibold text-cu-text">
+                    Mermaid Diagram — Full Preview
+                  </Dialog.Title>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {/* Zoom Controls */}
+                  <div className="flex items-center rounded border border-cu-border bg-cu-bg">
+                    <button
+                      type="button"
+                      onClick={() => setModalScale((s) => Math.max(s - 0.2, 0.4))}
+                      className="p-1 text-cu-text-tertiary hover:text-cu-text hover:bg-cu-hover rounded-l transition cursor-pointer"
+                      title="Zoom out"
+                    >
+                      <ZoomOut className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="px-1 text-[10px] font-mono text-cu-text-tertiary">
+                      {Math.round(modalScale * 100)}%
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setModalScale((s) => Math.min(s + 0.2, 2.5))}
+                      className="p-1 text-cu-text-tertiary hover:text-cu-text hover:bg-cu-hover rounded-r transition cursor-pointer"
+                      title="Zoom in"
+                    >
+                      <ZoomIn className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalScale(1);
+                      setModalPan({ x: 0, y: 0 });
+                    }}
+                    className="p-1 text-cu-text-tertiary hover:text-cu-text hover:bg-cu-hover rounded transition cursor-pointer"
+                    title="Reset view"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleCopyCode}
+                    className="p-1 text-cu-text-tertiary hover:text-cu-text hover:bg-cu-hover rounded transition cursor-pointer"
+                    title="Copy Mermaid code"
+                  >
+                    {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                  </button>
+
+                  <Dialog.Close asChild>
+                    <button
+                      type="button"
+                      className="p-1 text-cu-text-tertiary hover:text-cu-text hover:bg-cu-hover rounded transition cursor-pointer ml-1"
+                      title="Close preview (Esc)"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </Dialog.Close>
+                </div>
+              </div>
+
+              {/* Fullscreen Canvas with Pan & Zoom */}
+              <div
+                onMouseDown={(e) => {
+                  if (e.button !== 0) return;
+                  setIsModalPanning(true);
+                  setModalDragStart({ x: e.clientX - modalPan.x, y: e.clientY - modalPan.y });
+                }}
+                onMouseMove={(e) => {
+                  if (!isModalPanning) return;
+                  setModalPan({
+                    x: e.clientX - modalDragStart.x,
+                    y: e.clientY - modalDragStart.y,
+                  });
+                }}
+                onMouseUp={() => setIsModalPanning(false)}
+                onMouseLeave={() => setIsModalPanning(false)}
+                className={cn(
+                  "relative flex flex-1 items-center justify-center overflow-hidden p-8 select-none bg-cu-bg",
+                  isModalPanning ? "cursor-grabbing" : "cursor-grab",
+                )}
+                style={{
+                  backgroundImage:
+                    "radial-gradient(circle at 1px 1px, var(--color-cu-border, #27272a) 1px, transparent 0)",
+                  backgroundSize: "20px 20px",
+                }}
+              >
+                <div
+                  style={{
+                    transform: `translate(${modalPan.x}px, ${modalPan.y}px) scale(${modalScale})`,
+                    transformOrigin: "center center",
+                    transition: isModalPanning ? "none" : "transform 0.1s ease-out",
+                  }}
+                  className="max-w-none transition-transform pointer-events-none"
+                  dangerouslySetInnerHTML={{ __html: svgHtml }}
+                />
+
+                <div className="absolute bottom-3 left-4 rounded-md bg-cu-panel/80 backdrop-blur-xs border border-cu-border px-2.5 py-1 text-[11px] text-cu-text-tertiary pointer-events-none">
+                  Drag to pan • Use + / - to zoom • Esc to close
+                </div>
+              </div>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
       </NodeViewWrapper>
     );
   }
