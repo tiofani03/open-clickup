@@ -23,12 +23,13 @@ import {
   FolderPlus,
   LogOut,
   Star,
+  FileText,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { apiSend } from "@/lib/api";
 import { useWorkspace } from "@/components/workspace-context";
-import { useHierarchy } from "@/lib/hooks";
+import { useHierarchy, useDocs } from "@/lib/hooks";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { InboxButton } from "@/components/sidebar/inbox";
 import { ProfileDialog } from "@/components/profile-dialog";
@@ -41,6 +42,7 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
   const [creatingSpace, setCreatingSpace] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const { data: docs } = useDocs();
 
   const favLists = workspace.spaces
     .flatMap((s) => [...s.lists, ...s.folders.flatMap((f) => f.lists)])
@@ -91,6 +93,13 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
         />
         <InboxButton />
         <NavItem icon={<LayoutGrid className="h-4 w-4" />} label="Dashboards" />
+        <NavItem
+          icon={<FileText className="h-4 w-4" />}
+          label="Docs"
+          badge={docs?.length}
+          active={pathname?.startsWith("/docs")}
+          onClick={() => router.push("/docs")}
+        />
       </nav>
 
       {favLists.length > 0 && (
@@ -495,7 +504,11 @@ function Row({
       {addMenu ? (
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
-            <button className="hidden rounded p-0.5 text-cu-text-tertiary hover:bg-cu-hover group-hover:block" title="Add">
+            <button
+              onClick={(e) => e.stopPropagation()}
+              className="rounded p-0.5 text-cu-text-tertiary opacity-0 hover:bg-cu-hover group-hover:opacity-100 data-[state=open]:opacity-100 data-[state=open]:bg-cu-hover"
+              title="Add"
+            >
               <Plus className="h-3.5 w-3.5" />
             </button>
           </DropdownMenu.Trigger>
@@ -506,7 +519,11 @@ function Row({
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
       ) : onAdd ? (
-        <button onClick={onAdd} className="hidden rounded p-0.5 text-cu-text-tertiary hover:bg-cu-hover group-hover:block" title="New List">
+        <button
+          onClick={(e) => { e.stopPropagation(); onAdd(); }}
+          className="rounded p-0.5 text-cu-text-tertiary opacity-0 hover:bg-cu-hover group-hover:opacity-100"
+          title="New List"
+        >
           <Plus className="h-3.5 w-3.5" />
         </button>
       ) : null}
@@ -519,8 +536,8 @@ function RowMenu({ onRename, onDelete }: { onRename?: () => void; onDelete?: () 
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-          className="hidden rounded p-0.5 text-cu-text-tertiary hover:bg-cu-hover group-hover:block"
+          onClick={(e) => { e.stopPropagation(); }}
+          className="rounded p-0.5 text-cu-text-tertiary opacity-0 hover:bg-cu-hover group-hover:opacity-100 data-[state=open]:opacity-100 data-[state=open]:bg-cu-hover"
         >
           <Ellipsis className="h-3.5 w-3.5" />
         </button>
