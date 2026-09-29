@@ -1,27 +1,13 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { useEditor, EditorContent, type Editor } from "@tiptap/react";
+import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
-import {
-  Bold,
-  Italic,
-  Strikethrough,
-  Code,
-  Heading1,
-  Heading2,
-  Heading3,
-  List,
-  ListOrdered,
-  Quote,
-  SquareCode,
-  Eye,
-  FileText,
-} from "lucide-react";
 import { cn } from "../../lib/utils";
 import { markdownToHtml, htmlToMarkdown } from "../../lib/markdown";
 import { SlashCommand } from "./slash-command";
+import { FloatingToolbar } from "./floating-toolbar";
 
 export interface DocEditorProps {
   markdown: string;
@@ -38,7 +24,7 @@ export function DocEditor({
   markdown,
   onChange,
   onBlur,
-  placeholder = "Type '/' for commands or start typing...",
+  placeholder = "Type '/' for commands, or start typing...",
   readOnly = false,
   mode: propMode,
   onModeChange,
@@ -71,7 +57,7 @@ export function DocEditor({
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: "rich min-h-[350px] p-4 outline-none leading-relaxed",
+        class: "doc-rich min-h-[450px] outline-none leading-relaxed selection:bg-cu-purple/20 pb-20",
       },
     },
     onUpdate: ({ editor }) => {
@@ -134,13 +120,6 @@ export function DocEditor({
     }
   }, [activeMode, editor]);
 
-  // Handle mode toggling from UI buttons
-  const setMode = (nextMode: "visual" | "markdown") => {
-    if (nextMode === activeMode) return;
-    setInternalMode(nextMode);
-    onModeChange?.(nextMode);
-  };
-
   const handleRawChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newMd = e.target.value;
     setRawMarkdown(newMd);
@@ -155,68 +134,14 @@ export function DocEditor({
   };
 
   return (
-    <div
-      className={cn(
-        "rounded-lg border border-cu-border bg-cu-panel transition-colors focus-within:border-cu-purple/60",
-        className
-      )}
-    >
-      {/* Top Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-1 border-b border-cu-border bg-cu-panel px-2 py-1.5">
-        {/* Left: formatting tools for visual mode or markdown indicator */}
-        <div className="flex items-center gap-0.5">
-          {activeMode === "visual" && editor && !readOnly ? (
-            <VisualToolbar editor={editor} />
-          ) : activeMode === "markdown" ? (
-            <div className="flex items-center gap-1.5 px-2 py-1 text-xs font-mono text-cu-text-secondary">
-              <FileText className="h-3.5 w-3.5 text-cu-purple" />
-              <span>Raw Markdown Mode</span>
-            </div>
-          ) : (
-            <div className="h-7" />
-          )}
-        </div>
-
-        {/* Right: Mode Switch Toggle Buttons */}
-        <div className="flex items-center rounded-md border border-cu-border bg-cu-bg p-0.5 text-xs">
-          <button
-            type="button"
-            onClick={() => setMode("visual")}
-            className={cn(
-              "flex items-center gap-1 rounded px-2 py-1 transition-colors",
-              activeMode === "visual"
-                ? "bg-cu-purple text-white shadow-xs font-medium"
-                : "text-cu-text-secondary hover:text-cu-text"
-            )}
-            title="Visual WYSIWYG Mode"
-          >
-            <Eye className="h-3.5 w-3.5" />
-            <span>Visual</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("markdown")}
-            className={cn(
-              "flex items-center gap-1 rounded px-2 py-1 transition-colors",
-              activeMode === "markdown"
-                ? "bg-cu-purple text-white shadow-xs font-medium"
-                : "text-cu-text-secondary hover:text-cu-text"
-            )}
-            title="Raw Markdown Mode"
-          >
-            <FileText className="h-3.5 w-3.5" />
-            <span>Markdown</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Editor Body */}
+    <div className={cn("relative w-full", className)}>
       {activeMode === "visual" ? (
-        <div className="relative min-h-[350px]">
+        <div className="relative">
+          {editor && !readOnly && <FloatingToolbar editor={editor} />}
           <EditorContent editor={editor} />
         </div>
       ) : (
-        <div className="relative min-h-[350px]">
+        <div className="relative min-h-[450px]">
           <textarea
             value={rawMarkdown}
             onChange={handleRawChange}
@@ -224,7 +149,7 @@ export function DocEditor({
             disabled={readOnly}
             readOnly={readOnly}
             placeholder={placeholder}
-            className="w-full min-h-[350px] p-4 bg-cu-panel text-cu-text font-mono text-[13px] leading-relaxed resize-y focus:outline-none"
+            className="w-full min-h-[450px] bg-transparent text-cu-text font-mono text-[14px] leading-relaxed resize-none focus:outline-none placeholder:text-cu-text-tertiary"
             spellCheck={false}
           />
         </div>
@@ -232,114 +157,3 @@ export function DocEditor({
     </div>
   );
 }
-
-function VisualToolbar({ editor }: { editor: Editor }) {
-  const btn = (active: boolean) =>
-    cn(
-      "flex h-7 w-7 items-center justify-center rounded transition-colors hover:bg-cu-hover",
-      active
-        ? "bg-cu-purple-light text-cu-purple-dark font-medium dark:bg-cu-purple/20 dark:text-cu-purple"
-        : "text-cu-text-secondary hover:text-cu-text"
-    );
-
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-        className={btn(editor.isActive("heading", { level: 1 }))}
-        title="Heading 1"
-      >
-        <Heading1 className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        className={btn(editor.isActive("heading", { level: 2 }))}
-        title="Heading 2"
-      >
-        <Heading2 className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-        className={btn(editor.isActive("heading", { level: 3 }))}
-        title="Heading 3"
-      >
-        <Heading3 className="h-3.5 w-3.5" />
-      </button>
-
-      <span className="mx-1 h-4 w-px bg-cu-border" />
-
-      <button
-        type="button"
-        onClick={() => editor.chain().focus().toggleBold().run()}
-        className={btn(editor.isActive("bold"))}
-        title="Bold (Ctrl+B)"
-      >
-        <Bold className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => editor.chain().focus().toggleItalic().run()}
-        className={btn(editor.isActive("italic"))}
-        title="Italic (Ctrl+I)"
-      >
-        <Italic className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => editor.chain().focus().toggleStrike().run()}
-        className={btn(editor.isActive("strike"))}
-        title="Strikethrough"
-      >
-        <Strikethrough className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => editor.chain().focus().toggleCode().run()}
-        className={btn(editor.isActive("code"))}
-        title="Inline Code"
-      >
-        <Code className="h-3.5 w-3.5" />
-      </button>
-
-      <span className="mx-1 h-4 w-px bg-cu-border" />
-
-      <button
-        type="button"
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
-        className={btn(editor.isActive("bulletList"))}
-        title="Bullet List (- )"
-      >
-        <List className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        className={btn(editor.isActive("orderedList"))}
-        title="Numbered List (1. )"
-      >
-        <ListOrdered className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => editor.chain().focus().toggleBlockquote().run()}
-        className={btn(editor.isActive("blockquote"))}
-        title="Blockquote (> )"
-      >
-        <Quote className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-        className={btn(editor.isActive("codeBlock"))}
-        title="Code Block (```)"
-      >
-        <SquareCode className="h-3.5 w-3.5" />
-      </button>
-    </>
-  );
-}
-
-export default DocEditor;

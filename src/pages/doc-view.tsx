@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import * as Dialog from "@radix-ui/react-dialog";
+import * as Popover from "@radix-ui/react-popover";
 import {
   FileText,
   Plus,
@@ -20,6 +21,9 @@ import {
   PanelLeft,
   X,
   ArrowLeft,
+  Smile,
+  Image as ImageIcon,
+  Palette,
 } from "lucide-react";
 import {
   useDoc,
@@ -37,6 +41,16 @@ import type { DocPageItem } from "@/lib/queries";
 interface PageTreeNode extends DocPageItem {
   children: PageTreeNode[];
 }
+
+const COVER_PRESETS = [
+  { id: "purple", label: "Cosmic", class: "bg-gradient-to-r from-violet-600/40 via-purple-600/40 to-pink-500/40" },
+  { id: "ocean", label: "Ocean", class: "bg-gradient-to-r from-blue-600/40 via-cyan-600/40 to-teal-500/40" },
+  { id: "emerald", label: "Forest", class: "bg-gradient-to-r from-emerald-600/40 via-teal-600/40 to-lime-500/40" },
+  { id: "sunset", label: "Sunset", class: "bg-gradient-to-r from-amber-600/40 via-orange-600/40 to-rose-500/40" },
+  { id: "slate", label: "Slate", class: "bg-gradient-to-r from-slate-700/50 via-zinc-700/50 to-neutral-700/50" },
+];
+
+const ICON_PRESETS = ["📄", "🚀", "💡", "📝", "🎯", "⚡", "📚", "🛠️", "📌", "🌟", "🎨", "💻", "📊", "📋", "✨", "🔥"];
 
 export default function DocViewPage() {
   const { docId, pageId } = useParams<{ docId: string; pageId?: string }>();
@@ -367,6 +381,42 @@ export default function DocViewPage() {
     [docId, activePageId, updateDocPage],
   );
 
+  const handleSelectCover = (coverClass: string) => {
+    if (!docId || !activePageId) return;
+    updateDocPage.mutate({
+      docId,
+      pageId: activePageId,
+      patch: { coverImage: coverClass },
+    });
+  };
+
+  const handleRemoveCover = () => {
+    if (!docId || !activePageId) return;
+    updateDocPage.mutate({
+      docId,
+      pageId: activePageId,
+      patch: { coverImage: null },
+    });
+  };
+
+  const handleSelectIcon = (iconChar: string) => {
+    if (!docId || !activePageId) return;
+    updateDocPage.mutate({
+      docId,
+      pageId: activePageId,
+      patch: { icon: iconChar },
+    });
+  };
+
+  const handleRemoveIcon = () => {
+    if (!docId || !activePageId) return;
+    updateDocPage.mutate({
+      docId,
+      pageId: activePageId,
+      patch: { icon: null },
+    });
+  };
+
   // Render tree node recursively
   const renderTreeNode = (node: PageTreeNode, depth = 0) => {
     const hasChildren = node.children.length > 0;
@@ -402,12 +452,16 @@ export default function DocViewPage() {
           )}
 
           {/* Page Icon */}
-          <FileText
-            className={cn(
-              "h-3.5 w-3.5 shrink-0",
-              isActive ? "text-cu-purple" : "text-cu-text-tertiary",
-            )}
-          />
+          {node.icon ? (
+            <span className="text-xs shrink-0 select-none">{node.icon}</span>
+          ) : (
+            <FileText
+              className={cn(
+                "h-3.5 w-3.5 shrink-0",
+                isActive ? "text-cu-purple" : "text-cu-text-tertiary",
+              )}
+            />
+          )}
 
           {/* Title */}
           <span className="truncate flex-1">{node.title || "Untitled"}</span>
@@ -705,21 +759,172 @@ export default function DocViewPage() {
               <Loader2 className="h-6 w-6 animate-spin text-cu-purple" />
             </div>
           ) : activePageId ? (
-            <div className="mx-auto max-w-4xl px-8 py-8 md:px-12">
-              {/* Editable Page Title */}
-              <div className="mb-6">
-                <input
-                  type="text"
-                  value={pageTitle}
-                  onChange={(e) => handlePageTitleChange(e.target.value)}
-                  onBlur={handlePageTitleBlur}
-                  placeholder="Untitled"
-                  className="w-full bg-transparent text-3xl font-bold tracking-tight text-cu-text placeholder:text-cu-text-tertiary outline-none border-b border-transparent focus:border-cu-border/50 pb-2 transition"
-                />
-              </div>
+            <div className="relative min-h-full pb-28">
+              {/* Cover Banner if set */}
+              {activePageData?.coverImage ? (
+                <div className={cn("group relative h-44 w-full transition-all", activePageData.coverImage)}>
+                  <div className="absolute inset-0 bg-black/10" />
+                  <div className="absolute bottom-3 right-6 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Popover.Root>
+                      <Popover.Trigger asChild>
+                        <button className="flex items-center gap-1 rounded-md bg-black/50 backdrop-blur-md px-2.5 py-1 text-xs font-medium text-white hover:bg-black/70 transition">
+                          <Palette className="h-3.5 w-3.5" />
+                          <span>Change cover</span>
+                        </button>
+                      </Popover.Trigger>
+                      <Popover.Portal>
+                        <Popover.Content
+                          sideOffset={6}
+                          align="end"
+                          className="z-50 w-64 rounded-xl border border-cu-border bg-cu-panel p-2 shadow-2xl text-cu-text"
+                        >
+                          <div className="text-[11px] font-semibold text-cu-text-tertiary px-1 pb-1.5 uppercase tracking-wider">
+                            Select Gradient
+                          </div>
+                          <div className="grid grid-cols-5 gap-1.5 py-1">
+                            {COVER_PRESETS.map((c) => (
+                              <button
+                                key={c.id}
+                                onClick={() => handleSelectCover(c.class)}
+                                className={cn("h-8 rounded-lg border border-white/20 transition hover:scale-105", c.class)}
+                                title={c.label}
+                              />
+                            ))}
+                          </div>
+                          <div className="border-t border-cu-border mt-2 pt-1.5">
+                            <button
+                              onClick={handleRemoveCover}
+                              className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs text-cu-urgent hover:bg-cu-urgent/10"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                              <span>Remove cover</span>
+                            </button>
+                          </div>
+                        </Popover.Content>
+                      </Popover.Portal>
+                    </Popover.Root>
 
-              {/* Doc Editor Component */}
-              <div className="rounded-xl border border-cu-border bg-cu-panel shadow-2xs overflow-hidden">
+                    <button
+                      onClick={handleRemoveCover}
+                      className="rounded-md bg-black/50 backdrop-blur-md p-1 text-white hover:bg-black/70 transition"
+                      title="Remove cover"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="mx-auto max-w-4xl px-8 md:px-14">
+                {/* Notion Header Actions (Icon, Cover buttons) */}
+                <div className={cn("group/header relative pt-6", activePageData?.coverImage && "-mt-10")}>
+                  {/* Icon badge if exists */}
+                  {activePageData?.icon ? (
+                    <div className="mb-3 flex items-center gap-2">
+                      <Popover.Root>
+                        <Popover.Trigger asChild>
+                          <button
+                            className="flex h-16 w-16 items-center justify-center rounded-2xl bg-cu-panel text-3xl shadow-md border border-cu-border transition hover:bg-cu-hover hover:scale-105 select-none"
+                            title="Change icon"
+                          >
+                            <span>{activePageData.icon}</span>
+                          </button>
+                        </Popover.Trigger>
+                        <Popover.Portal>
+                          <Popover.Content
+                            sideOffset={8}
+                            align="start"
+                            className="z-50 w-64 rounded-xl border border-cu-border bg-cu-panel p-2.5 shadow-2xl text-cu-text"
+                          >
+                            <div className="text-[11px] font-semibold text-cu-text-tertiary px-1 pb-1.5 uppercase tracking-wider">
+                              Choose an icon
+                            </div>
+                            <div className="grid grid-cols-6 gap-1 py-1">
+                              {ICON_PRESETS.map((ic) => (
+                                <button
+                                  key={ic}
+                                  onClick={() => handleSelectIcon(ic)}
+                                  className="flex h-8 w-8 items-center justify-center rounded-lg text-lg hover:bg-cu-hover transition"
+                                >
+                                  {ic}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="border-t border-cu-border mt-2 pt-1.5">
+                              <button
+                                onClick={handleRemoveIcon}
+                                className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs text-cu-urgent hover:bg-cu-urgent/10"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                                <span>Remove icon</span>
+                              </button>
+                            </div>
+                          </Popover.Content>
+                        </Popover.Portal>
+                      </Popover.Root>
+                    </div>
+                  ) : null}
+
+                  {/* Hover buttons for Add icon & Add cover when not yet present */}
+                  <div className="flex items-center gap-2 opacity-0 group-hover/header:opacity-100 transition-opacity mb-2">
+                    {!activePageData?.icon && (
+                      <Popover.Root>
+                        <Popover.Trigger asChild>
+                          <button className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-text transition">
+                            <Smile className="h-3.5 w-3.5" />
+                            <span>Add icon</span>
+                          </button>
+                        </Popover.Trigger>
+                        <Popover.Portal>
+                          <Popover.Content
+                            sideOffset={6}
+                            align="start"
+                            className="z-50 w-64 rounded-xl border border-cu-border bg-cu-panel p-2.5 shadow-2xl text-cu-text"
+                          >
+                            <div className="text-[11px] font-semibold text-cu-text-tertiary px-1 pb-1.5 uppercase tracking-wider">
+                              Choose an icon
+                            </div>
+                            <div className="grid grid-cols-6 gap-1 py-1">
+                              {ICON_PRESETS.map((ic) => (
+                                <button
+                                  key={ic}
+                                  onClick={() => handleSelectIcon(ic)}
+                                  className="flex h-8 w-8 items-center justify-center rounded-lg text-lg hover:bg-cu-hover transition"
+                                >
+                                  {ic}
+                                </button>
+                              ))}
+                            </div>
+                          </Popover.Content>
+                        </Popover.Portal>
+                      </Popover.Root>
+                    )}
+
+                    {!activePageData?.coverImage && (
+                      <button
+                        onClick={() => handleSelectCover(COVER_PRESETS[0].class)}
+                        className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-text transition"
+                      >
+                        <ImageIcon className="h-3.5 w-3.5" />
+                        <span>Add cover</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Seamless Page Title */}
+                  <div className="mb-6">
+                    <input
+                      type="text"
+                      value={pageTitle}
+                      onChange={(e) => handlePageTitleChange(e.target.value)}
+                      onBlur={handlePageTitleBlur}
+                      placeholder="Untitled"
+                      className="w-full bg-transparent text-4xl font-extrabold tracking-tight text-cu-text placeholder:text-cu-text-tertiary outline-none border-none py-1 transition leading-tight"
+                    />
+                  </div>
+                </div>
+
+                {/* Seamless Doc Editor Component */}
                 <DocEditor
                   key={activePageId}
                   markdown={activePageData?.contentMarkdown ?? ""}
@@ -727,7 +932,7 @@ export default function DocViewPage() {
                   onModeChange={setEditorMode}
                   onChange={handleContentChange}
                   onBlur={handleContentBlur}
-                  placeholder="Type '/' for commands or start writing notes, specs, or guides..."
+                  placeholder="Type '/' for commands, or start writing notes, specs, or guides..."
                 />
               </div>
             </div>

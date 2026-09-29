@@ -226,6 +226,121 @@ body {
   height: 0;
 }
 
+/* ----------------------------------------------------------------------------
+   Doc-rich content (Notion / Confluence document canvas)
+---------------------------------------------------------------------------- */
+.doc-rich {
+  font-size: 15.5px;
+  line-height: 1.75;
+  color: var(--cu-text);
+  word-break: break-word;
+}
+.doc-rich p {
+  margin: 0 0 0.85em;
+}
+.doc-rich p:last-child {
+  margin-bottom: 0;
+}
+.doc-rich h1 {
+  font-size: 1.95em;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin: 1.4em 0 0.4em;
+  color: var(--cu-text);
+  line-height: 1.3;
+}
+.doc-rich h1:first-child {
+  margin-top: 0;
+}
+.doc-rich h2 {
+  font-size: 1.5em;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 1.25em 0 0.35em;
+  color: var(--cu-text);
+  line-height: 1.35;
+}
+.doc-rich h3 {
+  font-size: 1.25em;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin: 1.1em 0 0.3em;
+  color: var(--cu-text);
+  line-height: 1.4;
+}
+.doc-rich ul,
+.doc-rich ol {
+  margin: 0.4em 0 0.85em;
+  padding-left: 1.5em;
+}
+.doc-rich ul {
+  list-style: disc;
+}
+.doc-rich ol {
+  list-style: decimal;
+}
+.doc-rich li {
+  margin: 0.25em 0;
+}
+.doc-rich a {
+  color: var(--cu-purple);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: opacity 0.15s;
+}
+.doc-rich a:hover {
+  opacity: 0.85;
+}
+.doc-rich blockquote {
+  border-left: 3px solid var(--cu-purple);
+  background: var(--cu-hover);
+  padding: 0.6em 1.1em;
+  margin: 1em 0;
+  border-radius: 0 6px 6px 0;
+  color: var(--cu-text);
+}
+.doc-rich hr {
+  margin: 2em 0;
+  border: none;
+  border-top: 1px solid var(--cu-border);
+}
+.doc-rich code {
+  background: var(--cu-hover-strong);
+  border-radius: 4px;
+  padding: 0.15em 0.38em;
+  font-size: 0.88em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--cu-text);
+}
+.doc-rich pre {
+  background: #18191c;
+  color: #f1f2f4;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 1em 1.25em;
+  margin: 1em 0;
+  overflow-x: auto;
+  font-size: 0.9em;
+  line-height: 1.6;
+}
+.doc-rich pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}
+.doc-rich strong {
+  font-weight: 600;
+}
+.doc-rich p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--cu-text-tertiary);
+  pointer-events: none;
+  height: 0;
+}
+
+
 /* form input */
 .cu-input {
   width: 100%;

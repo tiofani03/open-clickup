@@ -6,14 +6,26 @@ import Suggestion, { type SuggestionOptions } from "@tiptap/suggestion";
 export interface CommandItem {
   title: string;
   description: string;
+  category: "Basic blocks" | "Advanced blocks";
   iconSvg: string;
   command: (params: { editor: Editor; range: Range }) => void;
 }
 
 const COMMAND_ITEMS: CommandItem[] = [
   {
+    title: "Text",
+    description: "Just start writing with plain text",
+    category: "Basic blocks",
+    iconSvg:
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg>',
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).setParagraph().run();
+    },
+  },
+  {
     title: "Heading 1",
     description: "Big section heading",
+    category: "Basic blocks",
     iconSvg: '<span style="font-size:12px;font-weight:700">H1</span>',
     command: ({ editor, range }) => {
       editor.chain().focus().deleteRange(range).setNode("heading", { level: 1 }).run();
@@ -22,6 +34,7 @@ const COMMAND_ITEMS: CommandItem[] = [
   {
     title: "Heading 2",
     description: "Medium section heading",
+    category: "Basic blocks",
     iconSvg: '<span style="font-size:12px;font-weight:700">H2</span>',
     command: ({ editor, range }) => {
       editor.chain().focus().deleteRange(range).setNode("heading", { level: 2 }).run();
@@ -30,6 +43,7 @@ const COMMAND_ITEMS: CommandItem[] = [
   {
     title: "Heading 3",
     description: "Small section heading",
+    category: "Basic blocks",
     iconSvg: '<span style="font-size:12px;font-weight:700">H3</span>',
     command: ({ editor, range }) => {
       editor.chain().focus().deleteRange(range).setNode("heading", { level: 3 }).run();
@@ -38,6 +52,7 @@ const COMMAND_ITEMS: CommandItem[] = [
   {
     title: "Bullet List",
     description: "Create a simple bulleted list",
+    category: "Basic blocks",
     iconSvg:
       '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>',
     command: ({ editor, range }) => {
@@ -47,6 +62,7 @@ const COMMAND_ITEMS: CommandItem[] = [
   {
     title: "Numbered List",
     description: "Create a list with numbering",
+    category: "Basic blocks",
     iconSvg:
       '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/></svg>',
     command: ({ editor, range }) => {
@@ -54,23 +70,29 @@ const COMMAND_ITEMS: CommandItem[] = [
     },
   },
   {
-    title: "Task List",
-    description: "Track tasks with a to-do checklist",
+    title: "To-do List",
+    description: "Track tasks with a checklist",
+    category: "Basic blocks",
     iconSvg:
       '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
     command: ({ editor, range }) => {
-      // If task list extension exists, toggle it; otherwise insert standard checklist markdown shortcut
-      const cmd = editor.commands as Record<string, unknown>;
-      if (typeof cmd.toggleTaskList === "function") {
-        (editor.chain().focus().deleteRange(range) as any).toggleTaskList().run();
-      } else {
-        editor.chain().focus().deleteRange(range).insertContent("- [ ] ").run();
-      }
+      editor.chain().focus().deleteRange(range).insertContent("- [ ] ").run();
+    },
+  },
+  {
+    title: "Callout",
+    description: "Make writing stand out with a highlight box",
+    category: "Advanced blocks",
+    iconSvg:
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).insertContent("> 💡 **Note:** ").run();
     },
   },
   {
     title: "Code Block",
     description: "Capture a code snippet with formatting",
+    category: "Advanced blocks",
     iconSvg:
       '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
     command: ({ editor, range }) => {
@@ -78,8 +100,9 @@ const COMMAND_ITEMS: CommandItem[] = [
     },
   },
   {
-    title: "Blockquote",
+    title: "Quote",
     description: "Capture a quote or highlight note",
+    category: "Advanced blocks",
     iconSvg:
       '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21c3 0 7-1 7-8V5c0-1.25-.756-2.017-2-2H4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/><path d="M15 21c3 0 7-1 7-8V5c0-1.25-.757-2.017-2-2h-4c-1.25 0-2 .75-2 1.972V11c0 1.25.75 2 2 2 1 0 1 0 1 1v1c0 1-1 2-2 2s-1 .008-1 1.031V20c0 1 0 1 1 1z"/></svg>',
     command: ({ editor, range }) => {
@@ -89,6 +112,7 @@ const COMMAND_ITEMS: CommandItem[] = [
   {
     title: "Divider",
     description: "Visually divide blocks with a horizontal line",
+    category: "Advanced blocks",
     iconSvg:
       '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>',
     command: ({ editor, range }) => {
@@ -109,7 +133,8 @@ export function createSlashSuggestion(): Omit<SuggestionOptions<CommandItem>, "e
       return COMMAND_ITEMS.filter(
         (item) =>
           item.title.toLowerCase().includes(q) ||
-          item.description.toLowerCase().includes(q)
+          item.description.toLowerCase().includes(q) ||
+          item.category.toLowerCase().includes(q)
       );
     },
     render: () => {
@@ -125,114 +150,157 @@ export function createSlashSuggestion(): Omit<SuggestionOptions<CommandItem>, "e
 
         if (items.length === 0) {
           const empty = document.createElement("div");
-          empty.className = "px-3 py-2 text-xs text-cu-text-tertiary";
-          empty.textContent = "No matching commands";
+          empty.className = "px-3 py-3 text-xs text-cu-text-tertiary text-center";
+          empty.textContent = "No matching blocks";
           popup.appendChild(empty);
-        } else {
-          items.forEach((it, i) => {
-            const b = document.createElement("button");
-            b.type = "button";
-            const isSelected = i === selected;
-            b.className = `flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-cu-text transition-colors hover:bg-cu-hover ${
-              isSelected ? "bg-cu-hover font-medium" : ""
-            }`;
-
-            b.innerHTML = `
-              <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded border border-cu-border bg-cu-bg text-cu-text-secondary">
-                ${it.iconSvg}
-              </span>
-              <div class="flex flex-col min-w-0 flex-1">
-                <span class="truncate font-medium text-cu-text text-[13px] leading-tight">${it.title}</span>
-                <span class="truncate text-[11px] text-cu-text-tertiary leading-tight">${it.description}</span>
-              </div>
-            `;
-
-            b.onmousedown = (e) => {
-              e.preventDefault();
-              command?.(it);
-            };
-
-            popup!.appendChild(b);
-
-            if (isSelected) {
-              b.scrollIntoView({ block: "nearest" });
-            }
-          });
+          return;
         }
 
-        if (rect) {
-          const top = rect.bottom + 6;
-          const left = rect.left;
-          const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 800;
-          const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 1000;
+        let lastCategory = "";
 
-          if (top + 320 > viewportHeight) {
-            popup.style.top = `${Math.max(10, rect.top - 325)}px`;
-          } else {
-            popup.style.top = `${top}px`;
+        items.forEach((it, i) => {
+          if (it.category !== lastCategory) {
+            lastCategory = it.category;
+            const catHeader = document.createElement("div");
+            catHeader.className =
+              "px-2.5 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-cu-text-tertiary";
+            catHeader.textContent = it.category;
+            popup!.appendChild(catHeader);
           }
-          popup.style.left = `${Math.max(10, Math.min(left, viewportWidth - 290))}px`;
+
+          const b = document.createElement("button");
+          b.type = "button";
+          const isSelected = i === selected;
+          b.className = `flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-cu-text transition-colors hover:bg-cu-hover ${
+            isSelected ? "bg-cu-hover font-medium ring-1 ring-cu-border" : ""
+          }`;
+
+          b.innerHTML = `
+            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-cu-border bg-cu-bg text-cu-text-secondary shadow-xs">
+              ${it.iconSvg}
+            </span>
+            <div class="flex flex-col min-w-0 flex-1">
+              <span class="truncate font-medium text-cu-text text-[13px] leading-snug">${it.title}</span>
+              <span class="truncate text-[11px] text-cu-text-tertiary leading-snug">${it.description}</span>
+            </div>
+          `;
+
+          b.onmousedown = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (command) {
+              command(it);
+            }
+          };
+
+          if (isSelected) {
+            setTimeout(() => {
+              b.scrollIntoView({ block: "nearest" });
+            }, 0);
+          }
+
+          popup!.appendChild(b);
+        });
+      }
+
+      function updatePosition(clientRect?: DOMRect | null) {
+        if (!popup) return;
+        const target = clientRect || rect;
+        if (!target) return;
+
+        const spaceBelow = window.innerHeight - target.bottom;
+        const popupHeight = 320;
+        const fitsBelow = spaceBelow >= popupHeight || spaceBelow >= 200;
+
+        let top = fitsBelow ? target.bottom + 6 : target.top - popupHeight - 6;
+        let left = target.left;
+
+        // Prevent overflow horizontally
+        const popupWidth = 300;
+        if (left + popupWidth > window.innerWidth - 16) {
+          left = window.innerWidth - popupWidth - 16;
         }
-        popup.style.display = "block";
+        if (left < 16) left = 16;
+
+        popup.style.top = `${top}px`;
+        popup.style.left = `${left}px`;
       }
 
       return {
         onStart: (props) => {
           items = props.items;
-          command = props.command;
           selected = 0;
+          command = props.command;
           rect = props.clientRect?.() ?? null;
-          if (popup) popup.remove();
+
+          if (popup) {
+            popup.remove();
+          }
+
           popup = document.createElement("div");
           popup.className =
-            "cu-slash-popup fixed z-50 flex max-h-[320px] w-72 flex-col overflow-y-auto rounded-lg border border-cu-border bg-cu-panel p-1.5 shadow-xl text-[13px] text-cu-text";
-          document.body.appendChild(popup);
+            "fixed z-50 max-h-[340px] w-[300px] overflow-y-auto rounded-xl border border-cu-border bg-cu-panel/95 p-1.5 shadow-2xl backdrop-blur-md outline-none animate-in fade-in zoom-in-95 duration-100";
+
           paint();
+          document.body.appendChild(popup);
+          updatePosition(rect);
         },
+
         onUpdate: (props) => {
           items = props.items;
+          selected = Math.min(selected, Math.max(0, items.length - 1));
           command = props.command;
-          selected = 0;
           rect = props.clientRect?.() ?? null;
           paint();
+          updatePosition(rect);
         },
+
         onKeyDown: (props) => {
-          const n = items.length;
           if (props.event.key === "ArrowDown") {
-            selected = n ? (selected + 1) % n : 0;
-            paint();
-            return true;
-          }
-          if (props.event.key === "ArrowUp") {
-            selected = n ? (selected - 1 + n) % n : 0;
-            paint();
-            return true;
-          }
-          if (props.event.key === "Enter") {
-            if (items[selected]) {
-              command?.(items[selected]);
+            if (items.length > 0) {
+              selected = (selected + 1) % items.length;
+              paint();
             }
             return true;
           }
-          if (props.event.key === "Escape") {
-            popup?.remove();
-            popup = null;
+
+          if (props.event.key === "ArrowUp") {
+            if (items.length > 0) {
+              selected = (selected - 1 + items.length) % items.length;
+              paint();
+            }
             return true;
           }
+
+          if (props.event.key === "Enter") {
+            if (items.length > 0 && items[selected] && command) {
+              command(items[selected]);
+              return true;
+            }
+          }
+
+          if (props.event.key === "Escape") {
+            if (popup) {
+              popup.remove();
+              popup = null;
+            }
+            return true;
+          }
+
           return false;
         },
+
         onExit: () => {
-          popup?.remove();
-          popup = null;
+          if (popup) {
+            popup.remove();
+            popup = null;
+          }
         },
       };
     },
   };
 }
 
-/**
- * TipTap Extension for Notion/ClickUp style Slash (/) command.
- */
 export const SlashCommand = Extension.create({
   name: "slashCommand",
 
@@ -251,5 +319,3 @@ export const SlashCommand = Extension.create({
     ];
   },
 });
-
-export default SlashCommand;
