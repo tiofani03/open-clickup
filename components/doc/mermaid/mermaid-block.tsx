@@ -241,6 +241,25 @@ export function MermaidBlock(props: NodeViewProps) {
     handleCodeChange(nextCode);
   };
 
+  // In read-only / preview mode (not editing), display only the clean diagram without toolbar or drag/pan
+  if (!isEditable) {
+    return (
+      <NodeViewWrapper className="my-6 flex items-center justify-center overflow-x-auto rounded-xl border border-cu-border/50 bg-cu-panel/40 p-4 transition-all">
+        {error ? (
+          <div className="rounded-lg border border-cu-urgent/30 bg-cu-urgent/10 p-4 text-center text-xs text-cu-urgent">
+            <p className="font-semibold">Mermaid Syntax Error</p>
+            <p className="mt-1 opacity-80">{error}</p>
+          </div>
+        ) : (
+          <div
+            className="flex items-center justify-center max-w-full"
+            dangerouslySetInnerHTML={{ __html: svgHtml }}
+          />
+        )}
+      </NodeViewWrapper>
+    );
+  }
+
   return (
     <NodeViewWrapper
       className={cn(
