@@ -8,7 +8,20 @@ import {
 } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { apiGet, apiSend } from "@/lib/api";
-import type { ListData, TaskWithRelations, UserLite, WorkspaceTree, TaskPatch } from "@/lib/queries";
+import type {
+  ListData,
+  TaskWithRelations,
+  UserLite,
+  WorkspaceTree,
+  TaskPatch,
+  DocItem,
+  DocPageItem,
+  DocDetail,
+  CreateDocPayload,
+  UpdateDocPayload,
+  CreateDocPagePayload,
+  UpdateDocPagePayload,
+} from "@/lib/queries";
 
 export type Bootstrap = { currentUser: UserLite; workspace: WorkspaceTree; favorites: string[] };
 
@@ -38,6 +51,10 @@ export function useRealtime() {
           qc.invalidateQueries({ queryKey: ["my-tasks"] });
         } else if (event.type === "bootstrap") {
           qc.invalidateQueries({ queryKey: ["bootstrap"] });
+        } else if (event.type === "doc") {
+          qc.invalidateQueries({ queryKey: ["docs"] });
+          qc.invalidateQueries({ queryKey: ["doc"] });
+          qc.invalidateQueries({ queryKey: ["doc-page"] });
         }
         qc.invalidateQueries({ queryKey: ["notifications"] });
       } catch {
@@ -335,3 +352,204 @@ function applyOptimistic(task: TaskWithRelations, patch: TaskPatch): TaskWithRel
     dueDate: patch.dueDate !== undefined ? (patch.dueDate ? new Date(patch.dueDate) : null) : task.dueDate,
   };
 }
+
+// ----------------------------------------------------------------------------
+// Docs & Doc Pages
+// ----------------------------------------------------------------------------
+
+export function useDocs(spaceId?: string) {
+  return useQuery({
+    queryKey: ["docs", { spaceId }],
+    queryFn: () =>
+      apiGet<DocItem[]>(spaceId ? `/api/docs?spaceId=${spaceId}` : "/api/docs"),
+  });
+}
+
+export function useDoc(docId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["doc", docId],
+    queryFn: () => apiGet<DocDetail>(`/api/docs/${docId}`),
+    enabled: !!docId,
+  });
+}
+
+export function useDocPage(
+  docId: string | null | undefined,
+  pageId: string | null | undefined,
+) {
+  return useQuery({
+    queryKey: ["doc-page", docId, pageId],
+    queryFn: () => apiGet<DocPageItem>(`/api/docs/${docId}/pages/${pageId}`),
+    enabled: !!docId && !!pageId,
+  });
+}
+
+export function useCreateDoc() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CreateDocPayload = {}) =>
+      apiSend<DocDetail>("/api/docs", "POST", payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["docs"] });
+    },
+  });
+}
+
+export function useUpdateDoc(docId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      args: { docId: string; patch: UpdateDocPayload } | UpdateDocPayload,
+    ) => {
+      const targetDocId =
+        "docId" in args && typeof args.docId === "string" ? args.docId : docId;
+      if (!targetDocId) {
+        throw new Error("docId is required to update doc");
+      }
+      const patch =
+        "patch" in args && args.patch !== undefined
+          ? args.patch
+          : (args as UpdateDocPayload);
+      return apiSend<DocItem>(`/api/docs/${targetDocId}`, "PATCH", patch);
+    },
+    onSuccess: (_data, variables) => {
+      const targetDocId =
+        typeof variables === "object" &&
+        variables &&
+        "docId" in variables &&
+        typeof variables.docId === "string"
+          ? variables.docId
+          : docId;
+      qc.invalidateQueries({ queryKey: ["docs"] });
+      if (targetDocId) {
+        qc.invalidateQueries({ queryKey: ["doc", targetDocId] });
+      }
+    },
+  });
+}
+
+export function useDeleteDoc(docId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (docIdArg?: string) => {
+      const targetDocId = docIdArg || docId;
+      if (!targetDocId) {
+        throw new Error("docId is required to delete doc");
+      }
+      return apiSend<{ ok: boolean }>(`/api/docs/${targetDocId}`, "DELETE");
+    },
+    onSuccess: (_data, variables) => {
+      const targetDocId = variables || docId;
+      qc.invalidateQueries({ queryKey: ["docs"] });
+      if (targetDocId) {
+        qc.invalidateQueries({ queryKey: ["doc", targetDocId] });
+      }
+    },
+  });
+}
+
+export function useCreateDocPage(docId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      input:
+        | { docId?: string; payload?: CreateDocPagePayload }
+        | CreateDocPagePayload = {},
+    ) => {
+      const targetDocId =
+        "docId" in input && typeof input.docId === "string"
+          ? input.docId
+          : docId;
+      if (!targetDocId) {
+        throw new Error("docId is required to create doc page");
+      }
+      const payload =
+        "payload" in input && input.payload !== undefined
+          ? input.payload
+          : "docId" in input
+            ? {}
+            : (input as CreateDocPagePayload);
+      return apiSend<DocPageItem>(
+        `/api/docs/${targetDocId}/pages`,
+        "POST",
+        payload,
+      );
+    },
+    onSuccess: (_data, variables) => {
+      const targetDocId =
+        typeof variables === "object" &&
+        variables &&
+        "docId" in variables &&
+        typeof variables.docId === "string"
+          ? variables.docId
+          : docId;
+      if (targetDocId) {
+        qc.invalidateQueries({ queryKey: ["doc", targetDocId] });
+      }
+    },
+  });
+}
+
+export function useUpdateDocPage(docId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      pageId,
+      patch,
+      docId: inlineDocId,
+    }: {
+      pageId: string;
+      patch: UpdateDocPagePayload;
+      docId?: string;
+    }) => {
+      const targetDocId = inlineDocId || docId;
+      if (!targetDocId) {
+        throw new Error("docId is required to update doc page");
+      }
+      return apiSend<DocPageItem>(
+        `/api/docs/${targetDocId}/pages/${pageId}`,
+        "PATCH",
+        patch,
+      );
+    },
+    onSuccess: (_data, vars) => {
+      const targetDocId = vars.docId || docId;
+      if (targetDocId) {
+        qc.invalidateQueries({ queryKey: ["doc", targetDocId] });
+        qc.invalidateQueries({
+          queryKey: ["doc-page", targetDocId, vars.pageId],
+        });
+      }
+    },
+  });
+}
+
+export function useDeleteDocPage(docId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      input: string | { docId?: string; pageId: string },
+    ) => {
+      const pageId = typeof input === "string" ? input : input.pageId;
+      const targetDocId =
+        typeof input === "object" && input.docId ? input.docId : docId;
+      if (!targetDocId) {
+        throw new Error("docId is required to delete doc page");
+      }
+      return apiSend<{ ok: boolean }>(
+        `/api/docs/${targetDocId}/pages/${pageId}`,
+        "DELETE",
+      );
+    },
+    onSuccess: (_data, input) => {
+      const targetDocId =
+        typeof input === "object" && input.docId ? input.docId : docId;
+      const pageId = typeof input === "string" ? input : input.pageId;
+      if (targetDocId) {
+        qc.invalidateQueries({ queryKey: ["doc", targetDocId] });
+        qc.invalidateQueries({ queryKey: ["doc-page", targetDocId, pageId] });
+      }
+    },
+  });
+}
+

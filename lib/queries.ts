@@ -277,3 +277,76 @@ export type TaskDetail = TaskWithRelations & {
     customFields: CustomFieldWithOptions[];
   };
 };
+
+// ----------------------------------------------------------------------------
+// Doc & DocPage Shapes
+// ----------------------------------------------------------------------------
+
+export type DocItem = {
+  id: string;
+  workspaceId: string;
+  spaceId: string | null;
+  folderId: string | null;
+  listId: string | null;
+  taskId: string | null;
+  title: string;
+  createdById: string;
+  isPinned: boolean;
+  createdAt: string;
+  updatedAt: string;
+  creator?: UserLite;
+};
+
+export type DocPageItem = {
+  id: string;
+  docId: string;
+  parentPageId: string | null;
+  title: string;
+  contentMarkdown?: string;
+  contentHtml?: string;
+  icon?: string | null;
+  coverImage?: string | null;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DocDetail = {
+  doc: DocItem;
+  pages: DocPageItem[];
+};
+
+export type DocDetailResponse = DocDetail;
+
+export type CreateDocPayload = {
+  workspaceId?: string;
+  spaceId?: string;
+  folderId?: string;
+  listId?: string;
+  taskId?: string;
+  title?: string;
+};
+
+export type UpdateDocPayload = {
+  title?: string;
+  isPinned?: boolean;
+  spaceId?: string | null;
+  folderId?: string | null;
+  listId?: string | null;
+};
+
+export type CreateDocPagePayload = {
+  title?: string;
+  parentPageId?: string | null;
+  position?: number;
+};
+
+export type UpdateDocPagePayload = {
+  title?: string;
+  contentMarkdown?: string;
+  contentHtml?: string;
+  icon?: string | null;
+  coverImage?: string | null;
+  position?: number;
+  parentPageId?: string | null;
+};
