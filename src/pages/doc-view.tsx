@@ -212,10 +212,30 @@ export default function DocViewPage() {
       { docId, pageId: pageToDeleteId },
       {
         onSuccess: () => {
-          if (pageToDeleteId === activePageId) {
-            const remaining = pages.filter((p) => p.id !== pageToDeleteId);
-            if (remaining.length > 0) {
-              navigate(`/docs/${docId}/p/${remaining[0].id}`);
+          const isDescendant = (pageId: string, parentId: string): boolean => {
+            let curr = pages.find((p) => p.id === pageId);
+            while (curr && curr.parentPageId) {
+              const currentParentId: string = curr.parentPageId;
+              if (currentParentId === parentId) return true;
+              curr = pages.find((p) => p.id === currentParentId);
+            }
+            return false;
+          };
+
+          const isTargetActiveOrDescendant =
+            activePageId === pageToDeleteId ||
+            (activePageId ? isDescendant(activePageId, pageToDeleteId) : false);
+
+          if (isTargetActiveOrDescendant) {
+            const remaining = pages.filter(
+              (p) => p.id !== pageToDeleteId && !isDescendant(p.id, pageToDeleteId),
+            );
+            const nextTarget =
+              pages.find((p) => !p.parentPageId && p.id !== pageToDeleteId) ?? remaining[0];
+            if (nextTarget) {
+              navigate(`/docs/${docId}/p/${nextTarget.id}`);
+            } else {
+              navigate(`/docs`);
             }
           }
         },

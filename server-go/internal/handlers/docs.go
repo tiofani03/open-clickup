@@ -204,8 +204,16 @@ func (h *DocsHandler) CreateDoc(c *fiber.Ctx) error {
 		workspaceID = ws.ID
 	}
 
+	tx, err := h.pool.Begin(ctx)
+	if err != nil {
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
+	}
+	defer tx.Rollback(ctx)
+
+	qtx := h.q.WithTx(tx)
+
 	docID := cuid()
-	doc, err := h.q.CreateDoc(ctx, db.CreateDocParams{
+	doc, err := qtx.CreateDoc(ctx, db.CreateDocParams{
 		ID:          docID,
 		WorkspaceID: workspaceID,
 		SpaceID:     foreignKeyText(req.SpaceID),
@@ -226,7 +234,7 @@ func (h *DocsHandler) CreateDoc(c *fiber.Ctx) error {
 	}
 
 	pageID := cuid()
-	page, err := h.q.CreateDocPage(ctx, db.CreateDocPageParams{
+	page, err := qtx.CreateDocPage(ctx, db.CreateDocPageParams{
 		ID:              pageID,
 		DocID:           doc.ID,
 		ParentPageID:    pgtype.Text{Valid: false},
@@ -238,6 +246,10 @@ func (h *DocsHandler) CreateDoc(c *fiber.Ctx) error {
 		Position:        65535.0,
 	})
 	if err != nil {
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
+	}
+
+	if err := tx.Commit(ctx); err != nil {
 		return sendError(c, fiber.StatusInternalServerError, err.Error())
 	}
 
