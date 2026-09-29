@@ -24,7 +24,7 @@ import {
   Circle,
   PlayCircle,
 } from "lucide-react";
-import { renderMermaidDiagram } from "./mermaid-renderer";
+import { renderMermaidDiagram, generateSvgFromMermaid } from "./mermaid-renderer";
 import { cn } from "../../../lib/utils";
 
 const DIAGRAM_TEMPLATES = [
@@ -117,7 +117,13 @@ export function MermaidBlock(props: NodeViewProps) {
 
   const [activeTab, setActiveTab] = useState<"visual" | "code" | "preview">("preview");
   const [codeValue, setCodeValue] = useState(rawCode);
-  const [svgHtml, setSvgHtml] = useState<string>("");
+
+  const containerId = useId().replace(/[:]/g, "_");
+  const safeContainerId = "m_" + containerId.replace(/[^a-zA-Z0-9]/g, "");
+
+  const [svgHtml, setSvgHtml] = useState<string>(() =>
+    generateSvgFromMermaid(safeContainerId, rawCode),
+  );
   const [error, setError] = useState<string | null>(null);
 
   // Zoom and pan state
@@ -131,7 +137,6 @@ export function MermaidBlock(props: NodeViewProps) {
   // Drag over dropzone indicator
   const [isDragOverDropzone, setIsDragOverDropzone] = useState(false);
 
-  const containerId = useId().replace(/[:]/g, "_");
   const canvasRef = useRef<HTMLDivElement>(null);
 
   // Sync external code
@@ -142,23 +147,26 @@ export function MermaidBlock(props: NodeViewProps) {
   // Render diagram whenever codeValue changes
   useEffect(() => {
     let isCancelled = false;
-    renderMermaidDiagram(containerId, codeValue)
+    const immediate = generateSvgFromMermaid(safeContainerId, codeValue);
+    setSvgHtml(immediate);
+    setError(null);
+
+    renderMermaidDiagram(safeContainerId, codeValue)
       .then((svg) => {
-        if (!isCancelled) {
+        if (!isCancelled && svg && svg !== immediate) {
           setSvgHtml(svg);
-          setError(null);
         }
       })
       .catch((err) => {
         if (!isCancelled) {
-          setError(err?.message || "Failed to render diagram");
+          console.warn("External mermaid render failed, using fallback:", err);
         }
       });
 
     return () => {
       isCancelled = true;
     };
-  }, [codeValue, containerId]);
+  }, [codeValue, safeContainerId]);
 
   const handleCodeChange = (newCode: string) => {
     setCodeValue(newCode);

@@ -122,9 +122,16 @@ export function markdownToHtml(markdown: string): string {
     if (trimmed.startsWith("```")) {
       if (inCodeBlock) {
         // Closing code block
-        const langAttr = codeBlockLang ? ` class="language-${codeBlockLang}"` : "";
+        const isMermaid = codeBlockLang.toLowerCase() === "mermaid";
         const escapedCode = escapeHtml(codeBlockContent.join("\n"));
-        htmlParts.push(`<pre><code${langAttr}>${escapedCode}</code></pre>`);
+        if (isMermaid) {
+          htmlParts.push(
+            `<div data-type="mermaid-block" data-code="${escapedCode}"><pre class="language-mermaid"><code class="language-mermaid">${escapedCode}</code></pre></div>`
+          );
+        } else {
+          const langAttr = codeBlockLang ? ` class="language-${codeBlockLang}"` : "";
+          htmlParts.push(`<pre><code${langAttr}>${escapedCode}</code></pre>`);
+        }
         inCodeBlock = false;
         codeBlockLang = "";
         codeBlockContent = [];
@@ -227,9 +234,16 @@ export function markdownToHtml(markdown: string): string {
 
   // Final flush for remaining open blocks
   if (inCodeBlock) {
-    const langAttr = codeBlockLang ? ` class="language-${codeBlockLang}"` : "";
+    const isMermaid = codeBlockLang.toLowerCase() === "mermaid";
     const escapedCode = escapeHtml(codeBlockContent.join("\n"));
-    htmlParts.push(`<pre><code${langAttr}>${escapedCode}</code></pre>`);
+    if (isMermaid) {
+      htmlParts.push(
+        `<div data-type="mermaid-block" data-code="${escapedCode}"><pre class="language-mermaid"><code class="language-mermaid">${escapedCode}</code></pre></div>`
+      );
+    } else {
+      const langAttr = codeBlockLang ? ` class="language-${codeBlockLang}"` : "";
+      htmlParts.push(`<pre><code${langAttr}>${escapedCode}</code></pre>`);
+    }
   } else {
     flushAll();
   }
@@ -245,10 +259,32 @@ export function htmlToMarkdown(html: string): string {
 
   let result = html.replace(/\r\n/g, "\n");
 
-  // 1. Preserve and extract <pre><code>...</code></pre> blocks
   const codeBlocks: string[] = [];
+
+  // 0. Preserve and extract Mermaid diagram blocks (div[data-type="mermaid-block"])
   result = result.replace(
-    /<pre><code(?:\s+class="(?:language-)?([^"]*)")?>([\s\S]*?)<\/code><\/pre>/gi,
+    /<div[^>]*data-type="mermaid-block"[^>]*data-code="([^"]*)"[\s\S]*?<\/div>/gi,
+    (_, encodedCode) => {
+      const idx = codeBlocks.length;
+      const cleanCode = unescapeHtml(encodedCode);
+      codeBlocks.push(`\`\`\`mermaid\n${cleanCode.trim()}\n\`\`\``);
+      return `\n\n\u0000CODEBLOCK${idx}\u0000\n\n`;
+    }
+  );
+
+  result = result.replace(
+    /<div[^>]*data-type="mermaid-block"[\s\S]*?<code[^>]*>([\s\S]*?)<\/code>[\s\S]*?<\/div>/gi,
+    (_, innerCode) => {
+      const idx = codeBlocks.length;
+      const cleanCode = unescapeHtml(innerCode);
+      codeBlocks.push(`\`\`\`mermaid\n${cleanCode.trim()}\n\`\`\``);
+      return `\n\n\u0000CODEBLOCK${idx}\u0000\n\n`;
+    }
+  );
+
+  // 1. Preserve and extract <pre><code>...</code></pre> blocks with any attributes
+  result = result.replace(
+    /<pre[^>]*><code(?:\s+[^>]*class="(?:language-)?([^" ]*)")?[^>]*>([\s\S]*?)<\/code><\/pre>/gi,
     (_, lang, code) => {
       const idx = codeBlocks.length;
       const cleanCode = unescapeHtml(code);

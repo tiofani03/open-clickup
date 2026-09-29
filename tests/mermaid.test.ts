@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { renderMermaidDiagram } from "../components/doc/mermaid/mermaid-renderer";
+import { renderMermaidDiagram, generateSvgFromMermaid } from "../components/doc/mermaid/mermaid-renderer";
+import { markdownToHtml, htmlToMarkdown } from "../lib/markdown";
 
 describe("Mermaid Diagram Renderer", () => {
   it("renders a standard flowchart with nodes and edges", async () => {
@@ -43,5 +44,26 @@ describe("Mermaid Diagram Renderer", () => {
     expect(svg).toContain("Client");
     expect(svg).toContain("API");
     expect(svg).toContain("Database");
+  });
+
+  it("synchronously generates SVG with generateSvgFromMermaid", () => {
+    const code = `flowchart TD
+    Start["Begin Process"] --> Finish['End Process']`;
+    const svg = generateSvgFromMermaid("sync_test", code);
+    expect(svg).toContain("<svg");
+    expect(svg).toContain("Begin Process");
+    expect(svg).toContain("End Process");
+    expect(svg).not.toContain('"Begin Process"');
+  });
+
+  it("preserves mermaid diagrams in markdownToHtml and htmlToMarkdown roundtrip", () => {
+    const originalMd = "```mermaid\nflowchart TD\n    A[Step 1] --> B[Step 2]\n```";
+    const html = markdownToHtml(originalMd);
+    expect(html).toContain('data-type="mermaid-block"');
+    expect(html).toContain("Step 1");
+    expect(html).toContain("Step 2");
+
+    const backToMd = htmlToMarkdown(html);
+    expect(backToMd).toBe(originalMd);
   });
 });

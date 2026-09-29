@@ -6,6 +6,7 @@ export const MermaidExtension = Node.create({
   group: "block",
   atom: true,
   draggable: true,
+  priority: 1000,
 
   addAttributes() {
     return {
@@ -26,9 +27,12 @@ export const MermaidExtension = Node.create({
         tag: 'div[data-type="mermaid-block"]',
         getAttrs: (element) => {
           if (typeof element === "string") return {};
-          return {
-            code: (element as HTMLElement).getAttribute("data-code") || "",
-          };
+          const el = element as HTMLElement;
+          const code =
+            el.getAttribute("data-code") ||
+            el.querySelector("code")?.textContent ||
+            "";
+          return { code };
         },
       },
       {

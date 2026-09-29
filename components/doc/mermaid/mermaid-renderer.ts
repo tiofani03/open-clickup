@@ -13,20 +13,26 @@ async function getMermaidInstance() {
   if (!mermaidPromise) {
     mermaidPromise = (async () => {
       try {
-        // Attempt dynamic import from CDN
+        // Attempt dynamic import from CDN with short race timeout so offline/air-gapped never hangs
         const cdnUrl = "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
-        const module = await import(/* @vite-ignore */ cdnUrl);
+        const importPromise = import(/* @vite-ignore */ cdnUrl);
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 1000));
+        const module = await Promise.race([importPromise, timeoutPromise]);
+        if (!module) return null;
+
         const mermaid = module.default || module;
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: "dark",
-          securityLevel: "loose",
-          fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
-        });
-        (window as any).mermaid = mermaid;
-        return mermaid;
-      } catch (err) {
-        console.warn("Could not load external mermaid CDN, using native SVG renderer engine:", err);
+        if (mermaid && typeof mermaid.initialize === "function") {
+          mermaid.initialize({
+            startOnLoad: false,
+            theme: "dark",
+            securityLevel: "loose",
+            fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+          });
+          (window as any).mermaid = mermaid;
+          return mermaid;
+        }
+        return null;
+      } catch {
         return null;
       }
     })();
@@ -56,7 +62,8 @@ interface ParsedSequenceMessage {
 /**
  * Built-in pure SVG diagram engine for Flowcharts, Sequences, and State diagrams.
  */
-function generateSvgFromMermaid(containerId: string, rawCode: string): string {
+export function generateSvgFromMermaid(containerId: string, rawCode: string): string {
+  const safeId = "m_" + containerId.replace(/[^a-zA-Z0-9]/g, "");
   const lines = rawCode
     .split("\n")
     .map((l) => l.trim())
@@ -70,11 +77,11 @@ function generateSvgFromMermaid(containerId: string, rawCode: string): string {
 
   // 1. Sequence Diagram
   if (firstLine.startsWith("sequencediagram")) {
-    return renderSequenceDiagram(containerId, lines.slice(1));
+    return renderSequenceDiagram(safeId, lines.slice(1));
   }
 
-  // 2. Flowchart / Graph (default)
-  return renderFlowchart(containerId, lines);
+  // 2. Flowchart / Graph / StateDiagram (default)
+  return renderFlowchart(safeId, lines);
 }
 
 function renderSequenceDiagram(id: string, lines: string[]): string {
@@ -116,7 +123,7 @@ function renderSequenceDiagram(id: string, lines: string[]): string {
     partPositions.set(p, 60 + idx * colWidth + colWidth / 2);
   });
 
-  let svg = `<svg id="${id}" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="background:transparent;font-family:Inter,sans-serif;">
+  let svg = `<svg id="${id}" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg" style="background:transparent;font-family:Inter,sans-serif;max-width:100%;height:auto;display:block;margin:0 auto;">
   <defs>
     <marker id="seq-arrow-${id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
       <path d="M 0 1 L 10 5 L 0 9 z" fill="#7b68ee" />
@@ -165,42 +172,46 @@ function renderFlowchart(id: string, lines: string[]): string {
   }
 
   // Helper to parse node shape & label
+  function cleanLabel(raw: string): string {
+    return raw.trim().replace(/^["']|["']$/g, "").trim();
+  }
+
   function parseNodeToken(token: string): string {
     const t = token.trim();
     // Cylinder: id[(Label)]
     const cylMatch = t.match(/^([A-Za-z0-9_]+)\[\((.*?)\)\]$/);
     if (cylMatch) {
-      nodesMap.set(cylMatch[1], { id: cylMatch[1], label: cylMatch[2], shape: "cylinder" });
+      nodesMap.set(cylMatch[1], { id: cylMatch[1], label: cleanLabel(cylMatch[2]), shape: "cylinder" });
       return cylMatch[1];
     }
     // Stadium / Terminal: id([Label])
     const stadMatch = t.match(/^([A-Za-z0-9_]+)\(\[(.*?)\]\)$/);
     if (stadMatch) {
-      nodesMap.set(stadMatch[1], { id: stadMatch[1], label: stadMatch[2], shape: "stadium" });
+      nodesMap.set(stadMatch[1], { id: stadMatch[1], label: cleanLabel(stadMatch[2]), shape: "stadium" });
       return stadMatch[1];
     }
     // Subroutine: id[[Label]]
     const subMatch = t.match(/^([A-Za-z0-9_]+)\[\[(.*?)\]\]$/);
     if (subMatch) {
-      nodesMap.set(subMatch[1], { id: subMatch[1], label: subMatch[2], shape: "subroutine" });
+      nodesMap.set(subMatch[1], { id: subMatch[1], label: cleanLabel(subMatch[2]), shape: "subroutine" });
       return subMatch[1];
     }
     // Diamond: id{Label}
     const diaMatch = t.match(/^([A-Za-z0-9_]+)\{(.*?)\}$/);
     if (diaMatch) {
-      nodesMap.set(diaMatch[1], { id: diaMatch[1], label: diaMatch[2], shape: "diamond" });
+      nodesMap.set(diaMatch[1], { id: diaMatch[1], label: cleanLabel(diaMatch[2]), shape: "diamond" });
       return diaMatch[1];
     }
     // Round: id(Label)
     const rndMatch = t.match(/^([A-Za-z0-9_]+)\((.*?)\)$/);
     if (rndMatch) {
-      nodesMap.set(rndMatch[1], { id: rndMatch[1], label: rndMatch[2], shape: "round" });
+      nodesMap.set(rndMatch[1], { id: rndMatch[1], label: cleanLabel(rndMatch[2]), shape: "round" });
       return rndMatch[1];
     }
     // Rect: id[Label]
     const rctMatch = t.match(/^([A-Za-z0-9_]+)\[(.*?)\]$/);
     if (rctMatch) {
-      nodesMap.set(rctMatch[1], { id: rctMatch[1], label: rctMatch[2], shape: "rect" });
+      nodesMap.set(rctMatch[1], { id: rctMatch[1], label: cleanLabel(rctMatch[2]), shape: "rect" });
       return rctMatch[1];
     }
     // Plain ID: A
@@ -218,6 +229,8 @@ function renderFlowchart(id: string, lines: string[]): string {
   for (let i = 1; i < lines.length; i++) {
     const line = lines[i].replace(/^subgraph.*$/i, "").replace(/^end$/i, "").trim();
     if (!line) continue;
+    const firstWord = line.split(/[\s(]/)[0]?.toLowerCase();
+    if (["style", "class", "classdef", "linkstyle", "click"].includes(firstWord)) continue;
 
     // Edge patterns:
     // A --> B
@@ -347,7 +360,7 @@ function renderFlowchart(id: string, lines: string[]): string {
     });
   }
 
-  let svg = `<svg id="${id}" width="${totalWidth}" height="${totalHeight}" viewBox="0 0 ${totalWidth} ${totalHeight}" xmlns="http://www.w3.org/2000/svg" style="background:transparent;font-family:Inter,sans-serif;">
+  let svg = `<svg id="${id}" width="${totalWidth}" height="${totalHeight}" viewBox="0 0 ${totalWidth} ${totalHeight}" xmlns="http://www.w3.org/2000/svg" style="background:transparent;font-family:Inter,sans-serif;max-width:100%;height:auto;display:block;margin:0 auto;">
   <defs>
     <filter id="shadow-${id}" x="-10%" y="-10%" width="120%" height="120%">
       <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.25" flood-color="#000000" />
@@ -439,20 +452,23 @@ function renderFlowchart(id: string, lines: string[]): string {
 }
 
 export async function renderMermaidDiagram(containerId: string, code: string): Promise<string> {
-  const mermaid = await getMermaidInstance();
-  if (mermaid) {
-    try {
-      const sanitizedId = `mermaid_${containerId.replace(/[^a-zA-Z0-9_]/g, "_")}`;
+  const safeId = "m_" + containerId.replace(/[^a-zA-Z0-9]/g, "");
+
+  // Always generate resilient native SVG
+  const nativeSvg = generateSvgFromMermaid(safeId, code);
+
+  try {
+    const mermaid = await getMermaidInstance();
+    if (mermaid && typeof mermaid.render === "function") {
+      const sanitizedId = `mermaid_${safeId}`;
       const res = await mermaid.render(sanitizedId, code);
       if (res && res.svg) {
         return res.svg;
       }
-    } catch (e) {
-      // Fallback seamlessly to native engine if syntax is non-standard or external failed
-      console.warn("External mermaid render failed, using fallback engine", e);
     }
+  } catch {
+    // Seamless fallback to native SVG
   }
 
-  // Built-in resilient SVG renderer
-  return generateSvgFromMermaid(containerId, code);
+  return nativeSvg;
 }
