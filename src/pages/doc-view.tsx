@@ -33,8 +33,11 @@ import {
   useCreateDocPage,
   useUpdateDocPage,
   useDeleteDocPage,
+  usePublishDocPage,
+  useDiscardDocDraft,
 } from "@/lib/hooks";
 import { DocEditor } from "@/components/doc/doc-editor";
+import { DocComments } from "@/components/doc/doc-comments";
 import { cn } from "@/lib/utils";
 import type { DocPageItem } from "@/lib/queries";
 
@@ -84,11 +87,13 @@ export default function DocViewPage() {
   const createDocPage = useCreateDocPage(docId);
   const updateDocPage = useUpdateDocPage(docId);
   const deleteDocPage = useDeleteDocPage(docId);
+  const publishDocPage = usePublishDocPage(docId);
+  const discardDocDraft = useDiscardDocDraft(docId);
 
   // UI state
   const [treeSidebarOpen, setTreeSidebarOpen] = useState(true);
   const [collapsedBranches, setCollapsedBranches] = useState<Record<string, boolean>>({});
-  const [editorMode, setEditorMode] = useState<"visual" | "markdown">("visual");
+  const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // Inline doc title state
@@ -214,11 +219,18 @@ export default function DocViewPage() {
           if (parentPageId) {
             setCollapsedBranches((prev) => ({ ...prev, [parentPageId]: false }));
           }
+          setIsEditing(true);
           navigate(`/docs/${docId}/p/${newPage.id}`);
         },
       },
     );
   };
+
+  // Reset editing mode when page changes
+  useEffect(() => {
+    setIsEditing(false);
+    lastSavedContentRef.current = null;
+  }, [activePageId]);
 
   const handleDeletePage = (pageToDeleteId: string) => {
     if (!docId || pages.length <= 1) return;
@@ -329,10 +341,10 @@ export default function DocViewPage() {
     );
   };
 
-  // Debounced Page Content Change
+  // Debounced Page Content Change (auto-saves draft while editing)
   const handleContentChange = useCallback(
     (markdown: string, html: string) => {
-      if (!docId || !activePageId) return;
+      if (!docId || !activePageId || !isEditing) return;
       lastSavedContentRef.current = { markdown, html };
 
       setIsSaving(true);
@@ -345,7 +357,11 @@ export default function DocViewPage() {
           {
             docId,
             pageId: activePageId,
-            patch: { contentMarkdown: markdown, contentHtml: html },
+            patch: {
+              draftMarkdown: markdown,
+              draftHtml: html,
+              hasDraft: true,
+            },
           },
           {
             onSettled: () => {
@@ -355,12 +371,12 @@ export default function DocViewPage() {
         );
       }, 800);
     },
-    [docId, activePageId, updateDocPage],
+    [docId, activePageId, isEditing, updateDocPage],
   );
 
   const handleContentBlur = useCallback(
     (markdown: string, html: string) => {
-      if (!docId || !activePageId) return;
+      if (!docId || !activePageId || !isEditing) return;
       if (contentSaveTimerRef.current) {
         clearTimeout(contentSaveTimerRef.current);
       }
@@ -369,7 +385,11 @@ export default function DocViewPage() {
         {
           docId,
           pageId: activePageId,
-          patch: { contentMarkdown: markdown, contentHtml: html },
+          patch: {
+            draftMarkdown: markdown,
+            draftHtml: html,
+            hasDraft: true,
+          },
         },
         {
           onSettled: () => {
@@ -378,8 +398,70 @@ export default function DocViewPage() {
         },
       );
     },
-    [docId, activePageId, updateDocPage],
+    [docId, activePageId, isEditing, updateDocPage],
   );
+
+  // Publish active page draft to live content
+  const handlePublish = useCallback(async () => {
+    if (!docId || !activePageId || publishDocPage.isPending) return;
+    if (contentSaveTimerRef.current) {
+      clearTimeout(contentSaveTimerRef.current);
+    }
+    if (lastSavedContentRef.current) {
+      await updateDocPage.mutateAsync({
+        docId,
+        pageId: activePageId,
+        patch: {
+          draftMarkdown: lastSavedContentRef.current.markdown,
+          draftHtml: lastSavedContentRef.current.html,
+          hasDraft: true,
+        },
+      });
+    }
+    await publishDocPage.mutateAsync({
+      docId,
+      pageId: activePageId,
+    });
+    setIsEditing(false);
+    setIsSaving(false);
+    lastSavedContentRef.current = null;
+  }, [docId, activePageId, publishDocPage, updateDocPage]);
+
+  // Discard working draft back to last published content
+  const handleDiscardDraft = useCallback(async () => {
+    if (!docId || !activePageId || discardDocDraft.isPending) return;
+    if (contentSaveTimerRef.current) {
+      clearTimeout(contentSaveTimerRef.current);
+    }
+    lastSavedContentRef.current = null;
+    await discardDocDraft.mutateAsync({
+      docId,
+      pageId: activePageId,
+    });
+    setIsEditing(false);
+    setIsSaving(false);
+  }, [docId, activePageId, discardDocDraft]);
+
+  // Keyboard shortcut listener: 'e' for edit, Cmd+Enter for publish
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput =
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable;
+
+      if (!isEditing && e.key.toLowerCase() === "e" && !isInput && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        setIsEditing(true);
+      } else if (isEditing && (e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        handlePublish();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isEditing, handlePublish]);
 
   const handleSelectCover = (coverClass: string) => {
     if (!docId || !activePageId) return;
@@ -465,6 +547,13 @@ export default function DocViewPage() {
 
           {/* Title */}
           <span className="truncate flex-1">{node.title || "Untitled"}</span>
+
+          {/* Draft badge */}
+          {node.hasDraft && (
+            <span className="shrink-0 text-[9px] font-semibold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-1 py-0.2 rounded uppercase tracking-wide">
+              Draft
+            </span>
+          )}
 
           {/* Hover actions */}
           <div
@@ -630,56 +719,83 @@ export default function DocViewPage() {
           </div>
         </div>
 
-        {/* Right: Status, Mode Switch, Pin, Delete */}
+        {/* Right: Confluence Workflow (Draft / Edit / Publish), Pin, Delete */}
         <div className="flex items-center gap-2.5 shrink-0">
-          {/* Save Status Indicator */}
-          <div className="flex items-center gap-1 text-[11px] text-cu-text-tertiary select-none">
-            {isSaving || updateDocPage.isPending ? (
-              <span className="flex items-center gap-1.5 text-cu-purple">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                <span>Saving...</span>
-              </span>
-            ) : (
-              <span className="flex items-center gap-1.5 text-emerald-500 font-medium">
-                <Check className="h-3 w-3" />
-                <span>Saved</span>
-              </span>
-            )}
-          </div>
-
-          <div className="h-4 w-px bg-cu-border" />
-
-          {/* Mode Switch Toggle: Visual / Markdown */}
-          <div className="flex items-center rounded-md border border-cu-border bg-cu-bg p-0.5 text-xs">
-            <button
-              type="button"
-              onClick={() => setEditorMode("visual")}
-              className={cn(
-                "flex items-center gap-1 rounded px-2 py-0.5 text-[11px] transition-colors",
-                editorMode === "visual"
-                  ? "bg-cu-purple text-white shadow-xs font-medium"
-                  : "text-cu-text-secondary hover:text-cu-text",
+          {!isEditing ? (
+            /* View Mode Controls */
+            <div className="flex items-center gap-2">
+              {activePageData?.hasDraft && (
+                <span className="flex items-center gap-1 text-[11px] font-semibold text-amber-500 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  Unpublished changes
+                </span>
               )}
-              title="Visual WYSIWYG Mode"
-            >
-              <Eye className="h-3 w-3" />
-              <span>Visual</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setEditorMode("markdown")}
-              className={cn(
-                "flex items-center gap-1 rounded px-2 py-0.5 text-[11px] transition-colors",
-                editorMode === "markdown"
-                  ? "bg-cu-purple text-white shadow-xs font-medium"
-                  : "text-cu-text-secondary hover:text-cu-text",
+              <button
+                type="button"
+                onClick={() => setIsEditing(true)}
+                className="flex items-center gap-1.5 rounded-md bg-cu-panel border border-cu-border hover:bg-cu-hover px-2.5 py-1 text-xs font-medium text-cu-text transition shadow-xs cursor-pointer"
+                title="Edit page (Press 'e')"
+              >
+                <Pencil className="h-3.5 w-3.5 text-cu-purple" />
+                <span>Edit</span>
+                <kbd className="hidden sm:inline-block ml-1 text-[10px] text-cu-text-tertiary font-mono bg-cu-subtle/50 px-1 rounded border border-cu-border/50">
+                  e
+                </kbd>
+              </button>
+            </div>
+          ) : (
+            /* Edit Mode Controls */
+            <div className="flex items-center gap-2">
+              {/* Draft Save Status Indicator */}
+              <div className="flex items-center gap-1 text-[11px] text-cu-text-tertiary select-none mr-1">
+                {isSaving || updateDocPage.isPending ? (
+                  <span className="flex items-center gap-1.5 text-amber-500">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <span>Saving draft...</span>
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-emerald-500 font-medium">
+                    <Check className="h-3 w-3" />
+                    <span>Draft saved</span>
+                  </span>
+                )}
+              </div>
+
+              {activePageData?.hasDraft && (
+                <button
+                  type="button"
+                  onClick={handleDiscardDraft}
+                  disabled={discardDocDraft.isPending}
+                  className="rounded-md px-2.5 py-1 text-xs text-cu-text-tertiary hover:text-cu-urgent hover:bg-cu-hover transition cursor-pointer"
+                  title="Revert draft back to last published version"
+                >
+                  Discard
+                </button>
               )}
-              title="Markdown Source Mode"
-            >
-              <FileText className="h-3 w-3" />
-              <span>Markdown</span>
-            </button>
-          </div>
+
+              <button
+                type="button"
+                onClick={() => setIsEditing(false)}
+                className="rounded-md px-2.5 py-1 text-xs text-cu-text-secondary hover:text-cu-text hover:bg-cu-hover transition cursor-pointer"
+              >
+                Close
+              </button>
+
+              <button
+                type="button"
+                onClick={handlePublish}
+                disabled={publishDocPage.isPending}
+                className="flex items-center gap-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3.5 py-1 text-xs font-semibold shadow-xs transition cursor-pointer"
+                title="Publish page to live view (Cmd+Enter)"
+              >
+                {publishDocPage.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Check className="h-3.5 w-3.5" />
+                )}
+                <span>{activePageData?.isPublished ? "Update" : "Publish"}</span>
+              </button>
+            </div>
+          )}
 
           <div className="h-4 w-px bg-cu-border" />
 
@@ -865,75 +981,93 @@ export default function DocViewPage() {
                     </div>
                   ) : null}
 
-                  {/* Hover buttons for Add icon & Add cover when not yet present */}
-                  <div className="flex items-center gap-2 opacity-0 group-hover/header:opacity-100 transition-opacity mb-2">
-                    {!activePageData?.icon && (
-                      <Popover.Root>
-                        <Popover.Trigger asChild>
-                          <button className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-text transition">
-                            <Smile className="h-3.5 w-3.5" />
-                            <span>Add icon</span>
-                          </button>
-                        </Popover.Trigger>
-                        <Popover.Portal>
-                          <Popover.Content
-                            sideOffset={6}
-                            align="start"
-                            className="z-50 w-64 rounded-xl border border-cu-border bg-cu-panel p-2.5 shadow-2xl text-cu-text"
-                          >
-                            <div className="text-[11px] font-semibold text-cu-text-tertiary px-1 pb-1.5 uppercase tracking-wider">
-                              Choose an icon
-                            </div>
-                            <div className="grid grid-cols-6 gap-1 py-1">
-                              {ICON_PRESETS.map((ic) => (
-                                <button
-                                  key={ic}
-                                  onClick={() => handleSelectIcon(ic)}
-                                  className="flex h-8 w-8 items-center justify-center rounded-lg text-lg hover:bg-cu-hover transition"
-                                >
-                                  {ic}
-                                </button>
-                              ))}
-                            </div>
-                          </Popover.Content>
-                        </Popover.Portal>
-                      </Popover.Root>
-                    )}
+                  {/* Hover buttons for Add icon & Add cover when in edit mode */}
+                  {isEditing && (
+                    <div className="flex items-center gap-2 opacity-0 group-hover/header:opacity-100 transition-opacity mb-2">
+                      {!activePageData?.icon && (
+                        <Popover.Root>
+                          <Popover.Trigger asChild>
+                            <button className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-text transition cursor-pointer">
+                              <Smile className="h-3.5 w-3.5" />
+                              <span>Add icon</span>
+                            </button>
+                          </Popover.Trigger>
+                          <Popover.Portal>
+                            <Popover.Content
+                              sideOffset={6}
+                              align="start"
+                              className="z-50 w-64 rounded-xl border border-cu-border bg-cu-panel p-2.5 shadow-2xl text-cu-text"
+                            >
+                              <div className="text-[11px] font-semibold text-cu-text-tertiary px-1 pb-1.5 uppercase tracking-wider">
+                                Choose an icon
+                              </div>
+                              <div className="grid grid-cols-6 gap-1 py-1">
+                                {ICON_PRESETS.map((ic) => (
+                                  <button
+                                    key={ic}
+                                    onClick={() => handleSelectIcon(ic)}
+                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-lg hover:bg-cu-hover transition cursor-pointer"
+                                  >
+                                    {ic}
+                                  </button>
+                                ))}
+                              </div>
+                            </Popover.Content>
+                          </Popover.Portal>
+                        </Popover.Root>
+                      )}
 
-                    {!activePageData?.coverImage && (
-                      <button
-                        onClick={() => handleSelectCover(COVER_PRESETS[0].class)}
-                        className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-text transition"
-                      >
-                        <ImageIcon className="h-3.5 w-3.5" />
-                        <span>Add cover</span>
-                      </button>
-                    )}
-                  </div>
+                      {!activePageData?.coverImage && (
+                        <button
+                          onClick={() => handleSelectCover(COVER_PRESETS[0].class)}
+                          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-text transition cursor-pointer"
+                        >
+                          <ImageIcon className="h-3.5 w-3.5" />
+                          <span>Add cover</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
 
-                  {/* Seamless Page Title */}
+                  {/* Page Title: Editable Input in Edit Mode, Readonly Heading in View Mode */}
                   <div className="mb-6">
-                    <input
-                      type="text"
-                      value={pageTitle}
-                      onChange={(e) => handlePageTitleChange(e.target.value)}
-                      onBlur={handlePageTitleBlur}
-                      placeholder="Untitled"
-                      className="w-full bg-transparent text-4xl font-extrabold tracking-tight text-cu-text placeholder:text-cu-text-tertiary outline-none border-none py-1 transition leading-tight"
-                    />
+                    {isEditing ? (
+                      <input
+                        type="text"
+                        value={pageTitle}
+                        onChange={(e) => handlePageTitleChange(e.target.value)}
+                        onBlur={handlePageTitleBlur}
+                        placeholder="Untitled"
+                        className="w-full bg-transparent text-4xl font-extrabold tracking-tight text-cu-text placeholder:text-cu-text-tertiary outline-none border-none py-1 transition leading-tight"
+                      />
+                    ) : (
+                      <h1 className="w-full text-4xl font-extrabold tracking-tight text-cu-text py-1 leading-tight select-text">
+                        {pageTitle || "Untitled"}
+                      </h1>
+                    )}
                   </div>
                 </div>
 
                 {/* Seamless Doc Editor Component */}
                 <DocEditor
-                  key={activePageId}
-                  markdown={activePageData?.contentMarkdown ?? ""}
-                  mode={editorMode}
-                  onModeChange={setEditorMode}
+                  key={`${activePageId}-${isEditing ? "edit" : "view"}`}
+                  markdown={
+                    isEditing
+                      ? (activePageData?.hasDraft && activePageData.draftMarkdown !== undefined && activePageData.draftMarkdown !== null
+                          ? activePageData.draftMarkdown
+                          : (activePageData?.contentMarkdown ?? ""))
+                      : (activePageData?.contentMarkdown ?? "")
+                  }
+                  readOnly={!isEditing}
                   onChange={handleContentChange}
                   onBlur={handleContentBlur}
                   placeholder="Type '/' for commands, or start writing notes, specs, or guides..."
                 />
+
+                {/* Threaded Doc Comments at Bottom of Document */}
+                {docId && activePageId && (
+                  <DocComments docId={docId} pageId={activePageId} />
+                )}
               </div>
             </div>
           ) : (
