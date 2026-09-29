@@ -9,6 +9,7 @@ import { WorkspaceProvider } from "@/components/workspace-context";
 import { Sidebar } from "@/components/sidebar/sidebar";
 import { CommandPalette } from "@/components/command-palette";
 import { ShortcutsHelp } from "@/components/shortcuts-help";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 
 function isTyping(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
@@ -112,7 +113,9 @@ export function AppShell({ children }: { children?: React.ReactNode }) {
             </button>
             <span className="text-[14px] font-semibold">Open ClickUp</span>
           </div>
-          {children ?? <Outlet />}
+          <ErrorBoundary>
+            {children ?? <Outlet />}
+          </ErrorBoundary>
         </main>
         <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
         <ShortcutsHelp open={helpOpen} onClose={() => setHelpOpen(false)} />

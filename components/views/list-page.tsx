@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { TemplatePicker } from "@/components/views/template-picker";
 import { useList, useCreateTask, useToggleFavorite } from "@/lib/hooks";
 import { useWorkspace } from "@/components/workspace-context";
@@ -270,7 +271,9 @@ export function ListPage({ listId }: { listId: string }) {
       )}
 
       {openTaskId && (
-        <TaskModal taskId={openTaskId} listId={listId} onClose={closeTask} onOpenTask={setOpenTaskId} />
+        <ErrorBoundary fallback={null}>
+          <TaskModal taskId={openTaskId} listId={listId} onClose={closeTask} onOpenTask={setOpenTaskId} />
+        </ErrorBoundary>
       )}
       {statusMgr && (
         <StatusManager listId={listId} statuses={data.list.statuses} onClose={() => setStatusMgr(false)} />
