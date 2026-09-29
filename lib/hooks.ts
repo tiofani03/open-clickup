@@ -21,6 +21,8 @@ import type {
   UpdateDocPayload,
   CreateDocPagePayload,
   UpdateDocPagePayload,
+  DocCommentItem,
+  CreateDocCommentPayload,
 } from "@/lib/queries";
 
 export type Bootstrap = { currentUser: UserLite; workspace: WorkspaceTree; favorites: string[] };
@@ -55,6 +57,7 @@ export function useRealtime() {
           qc.invalidateQueries({ queryKey: ["docs"] });
           qc.invalidateQueries({ queryKey: ["doc"] });
           qc.invalidateQueries({ queryKey: ["doc-page"] });
+          qc.invalidateQueries({ queryKey: ["doc-comments"] });
         }
         qc.invalidateQueries({ queryKey: ["notifications"] });
       } catch {
@@ -548,6 +551,88 @@ export function useDeleteDocPage(docId?: string) {
       if (targetDocId) {
         qc.invalidateQueries({ queryKey: ["doc", targetDocId] });
         qc.invalidateQueries({ queryKey: ["doc-page", targetDocId, pageId] });
+      }
+    },
+  });
+}
+
+export function usePublishDocPage(docId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ pageId, docId: inlineDocId }: { pageId: string; docId?: string }) => {
+      const targetDocId = inlineDocId || docId;
+      if (!targetDocId) throw new Error("docId is required to publish doc page");
+      return apiSend<DocPageItem>(`/api/docs/${targetDocId}/pages/${pageId}/publish`, "POST");
+    },
+    onSuccess: (_data, vars) => {
+      const targetDocId = vars.docId || docId;
+      if (targetDocId) {
+        qc.invalidateQueries({ queryKey: ["doc", targetDocId] });
+        qc.invalidateQueries({ queryKey: ["doc-page", targetDocId, vars.pageId] });
+      }
+    },
+  });
+}
+
+export function useDiscardDocDraft(docId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ pageId, docId: inlineDocId }: { pageId: string; docId?: string }) => {
+      const targetDocId = inlineDocId || docId;
+      if (!targetDocId) throw new Error("docId is required to discard doc page draft");
+      return apiSend<DocPageItem>(`/api/docs/${targetDocId}/pages/${pageId}/discard-draft`, "POST");
+    },
+    onSuccess: (_data, vars) => {
+      const targetDocId = vars.docId || docId;
+      if (targetDocId) {
+        qc.invalidateQueries({ queryKey: ["doc", targetDocId] });
+        qc.invalidateQueries({ queryKey: ["doc-page", targetDocId, vars.pageId] });
+      }
+    },
+  });
+}
+
+export function useDocComments(docId: string | null | undefined, pageId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["doc-comments", docId, pageId],
+    queryFn: () => apiGet<DocCommentItem[]>(`/api/docs/${docId}/pages/${pageId}/comments`),
+    enabled: !!docId && !!pageId,
+  });
+}
+
+export function useCreateDocComment(docId?: string, pageId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { docId?: string; pageId?: string; payload: CreateDocCommentPayload }) => {
+      const targetDocId = vars.docId || docId;
+      const targetPageId = vars.pageId || pageId;
+      if (!targetDocId || !targetPageId) throw new Error("docId and pageId are required to create comment");
+      return apiSend<DocCommentItem>(`/api/docs/${targetDocId}/pages/${targetPageId}/comments`, "POST", vars.payload);
+    },
+    onSuccess: (_data, vars) => {
+      const targetDocId = vars.docId || docId;
+      const targetPageId = vars.pageId || pageId;
+      if (targetDocId && targetPageId) {
+        qc.invalidateQueries({ queryKey: ["doc-comments", targetDocId, targetPageId] });
+      }
+    },
+  });
+}
+
+export function useDeleteDocComment(docId?: string, pageId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { docId?: string; pageId?: string; commentId: string }) => {
+      const targetDocId = vars.docId || docId;
+      const targetPageId = vars.pageId || pageId;
+      if (!targetDocId || !targetPageId) throw new Error("docId and pageId are required to delete comment");
+      return apiSend<{ ok: boolean }>(`/api/docs/${targetDocId}/pages/${targetPageId}/comments/${vars.commentId}`, "DELETE");
+    },
+    onSuccess: (_data, vars) => {
+      const targetDocId = vars.docId || docId;
+      const targetPageId = vars.pageId || pageId;
+      if (targetDocId && targetPageId) {
+        qc.invalidateQueries({ queryKey: ["doc-comments", targetDocId, targetPageId] });
       }
     },
   });

@@ -309,6 +309,26 @@ export type DocPageItem = {
   position: number;
   createdAt: string;
   updatedAt: string;
+  isPublished?: boolean;
+  hasDraft?: boolean;
+  draftMarkdown?: string | null;
+  draftHtml?: string | null;
+};
+
+export type DocCommentItem = {
+  id: string;
+  docPageId: string;
+  userId: string;
+  body: string;
+  parentId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user?: UserLite;
+};
+
+export type CreateDocCommentPayload = {
+  body: string;
+  parentId?: string | null;
 };
 
 export type DocDetail = {
@@ -353,4 +373,8 @@ export type UpdateDocPagePayload = {
   coverImage?: string | null;
   position?: number;
   parentPageId?: string | null;
+  isPublished?: boolean;
+  hasDraft?: boolean;
+  draftMarkdown?: string | null;
+  draftHtml?: string | null;
 };
