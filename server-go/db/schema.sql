@@ -1344,11 +1344,25 @@ CREATE TABLE "DocPage" (
     "cover_image" TEXT,
     "position" DOUBLE PRECISION NOT NULL DEFAULT 65535.0,
     "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "is_published" BOOLEAN NOT NULL DEFAULT true,
+    "has_draft" BOOLEAN NOT NULL DEFAULT false,
+    "draft_markdown" TEXT,
+    "draft_html" TEXT
 );
 
 CREATE INDEX "idx_doc_page_doc" ON "DocPage"("doc_id");
 CREATE INDEX "idx_doc_page_parent" ON "DocPage"("parent_page_id");
 
+CREATE TABLE "DocComment" (
+    "id" TEXT PRIMARY KEY,
+    "doc_page_id" TEXT NOT NULL REFERENCES "DocPage"("id") ON DELETE CASCADE,
+    "user_id" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+    "body" TEXT NOT NULL,
+    "parent_id" TEXT REFERENCES "DocComment"("id") ON DELETE CASCADE,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
-
+CREATE INDEX "idx_doc_comment_page" ON "DocComment"("doc_page_id");
+CREATE INDEX "idx_doc_comment_parent" ON "DocComment"("parent_id");
