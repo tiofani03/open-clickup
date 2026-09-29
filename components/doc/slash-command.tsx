@@ -151,6 +151,9 @@ const COMMAND_ITEMS: CommandItem[] = [
 export function createSlashSuggestion(): Omit<SuggestionOptions<CommandItem>, "editor"> {
   return {
     char: "/",
+    command: ({ editor, range, props }) => {
+      props.command({ editor, range });
+    },
     items: ({ query }: { query: string }) => {
       const q = query.toLowerCase().trim();
       if (!q) return COMMAND_ITEMS;
@@ -213,7 +216,12 @@ export function createSlashSuggestion(): Omit<SuggestionOptions<CommandItem>, "e
             e.preventDefault();
             e.stopPropagation();
             if (command) {
-              command(it);
+              const selectedItem = it;
+              if (popup) {
+                popup.remove();
+                popup = null;
+              }
+              command(selectedItem);
             }
           };
 
@@ -296,9 +304,16 @@ export function createSlashSuggestion(): Omit<SuggestionOptions<CommandItem>, "e
             return true;
           }
 
-          if (props.event.key === "Enter") {
+          if (props.event.key === "Enter" || props.event.key === "Tab") {
             if (items.length > 0 && items[selected] && command) {
-              command(items[selected]);
+              props.event.preventDefault();
+              props.event.stopPropagation();
+              const selectedItem = items[selected];
+              if (popup) {
+                popup.remove();
+                popup = null;
+              }
+              command(selectedItem);
               return true;
             }
           }
