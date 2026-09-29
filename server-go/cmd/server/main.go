@@ -162,6 +162,13 @@ func main() {
 	docs.Post("/:docId/pages/:pageId/comments", auth.RequireRole(q, db.MemberRoleMEMBER), docH.CreateDocComment)
 	docs.Delete("/:docId/pages/:pageId/comments/:commentId", auth.RequireRole(q, db.MemberRoleMEMBER), docH.DeleteDocComment)
 
+	// File Uploads
+	uploadDir := "./data/uploads"
+	_ = os.MkdirAll(uploadDir, 0755)
+	uploadH := handlers.NewUploadHandler(uploadDir)
+	api.Post("/upload", auth.RequireUser(q), uploadH.Upload)
+	app.Static("/uploads", uploadDir)
+
 	// In production, serve built SPA from ./dist
 	if os.Getenv("NODE_ENV") == "production" {
 		app.Static("/", "./dist")
