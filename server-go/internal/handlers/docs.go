@@ -593,7 +593,13 @@ func (h *DocsHandler) CreateDocComment(c *fiber.Ctx) error {
 	docID := c.Params("docId")
 	pageID := c.Params("pageId")
 	ctx := c.Context()
-	userID, _ := c.Locals("userId").(string)
+
+	var userID string
+	if val := c.Locals("user"); val != nil {
+		if u, ok := val.(*db.GetSessionWithUserRow); ok {
+			userID = u.UserId
+		}
+	}
 	if userID == "" {
 		return sendError(c, fiber.StatusUnauthorized, "Unauthorized")
 	}
