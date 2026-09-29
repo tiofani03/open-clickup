@@ -2,6 +2,7 @@
 
 import { Extension, type Editor, type Range } from "@tiptap/react";
 import Suggestion, { type SuggestionOptions } from "@tiptap/suggestion";
+import { uploadAndInsertImage } from "./doc-editor";
 
 export interface CommandItem {
   title: string;
@@ -141,6 +142,30 @@ const COMMAND_ITEMS: CommandItem[] = [
       '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>',
     command: ({ editor, range }) => {
       editor.chain().focus().deleteRange(range).setHorizontalRule().run();
+    },
+  },
+  {
+    title: "Image",
+    description: "Upload and insert an image",
+    category: "Advanced blocks",
+    iconSvg:
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>',
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).run();
+      if (typeof document === "undefined") return;
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.style.display = "none";
+      document.body.appendChild(input);
+      input.onchange = (e) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (file) {
+          uploadAndInsertImage(file, editor);
+        }
+        input.remove();
+      };
+      input.click();
     },
   },
 ];

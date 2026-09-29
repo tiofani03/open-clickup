@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import { cn } from "../../lib/utils";
@@ -10,6 +10,44 @@ import { SlashCommand } from "./slash-command";
 import { FloatingToolbar } from "./floating-toolbar";
 import { MermaidExtension } from "./mermaid/mermaid-extension";
 import { ImageExtension } from "./image/image-extension";
+import { compressImage } from "../../lib/image-compressor";
+
+export async function uploadAndInsertImage(file: File, editor: Editor, pos?: number) {
+  try {
+    const compressed = await compressImage(file);
+    const form = new FormData();
+    let uploadName = file.name || "image.webp";
+    if (!/\.(png|jpe?g|webp|gif|svg)$/i.test(uploadName)) {
+      uploadName = `${uploadName}.webp`;
+    }
+    form.append("file", compressed, uploadName);
+
+    const res = await fetch("/api/upload", {
+      method: "POST",
+      body: form,
+    });
+    if (!res.ok) throw new Error("Upload failed");
+    const data = await res.json();
+
+    const node = editor.schema.nodes.imageBlock?.create({
+      src: data.url,
+      alt: (file.name ? file.name.replace(/\.[^/.]+$/, "") : "") || "Image",
+      caption: "",
+      width: "100%",
+      alignment: "center",
+    });
+
+    if (!node) return;
+
+    if (pos !== undefined) {
+      editor.view.dispatch(editor.state.tr.insert(pos, node));
+    } else {
+      editor.chain().focus().insertContent(node).run();
+    }
+  } catch (err) {
+    console.error("Failed to insert image:", err);
+  }
+}
 
 export interface DocEditorProps {
   markdown: string;
@@ -39,6 +77,7 @@ export function DocEditor({
   const rawMarkdownRef = useRef<string>(rawMarkdown);
   const lastMarkdownProp = useRef<string>(markdown ?? "");
   const lastMode = useRef<"visual" | "markdown">(activeMode);
+  const editorRef = useRef<Editor | null>(null);
 
   useEffect(() => {
     rawMarkdownRef.current = rawMarkdown;
@@ -63,6 +102,35 @@ export function DocEditor({
       attributes: {
         class: "doc-rich min-h-[450px] outline-none leading-relaxed selection:bg-cu-purple/20 pb-20",
       },
+      handlePaste: (view, event) => {
+        const items = event.clipboardData?.items;
+        if (!items) return false;
+        for (const item of Array.from(items)) {
+          if (item.type.startsWith("image/")) {
+            event.preventDefault();
+            const file = item.getAsFile();
+            const ed = editorRef.current ?? (view as any).editor ?? editor;
+            if (file && ed) uploadAndInsertImage(file, ed);
+            return true;
+          }
+        }
+        return false;
+      },
+      handleDrop: (view, event, slice, moved) => {
+        if (moved) return false;
+        const files = event.dataTransfer?.files;
+        if (!files || files.length === 0) return false;
+        for (const file of Array.from(files)) {
+          if (file.type.startsWith("image/")) {
+            event.preventDefault();
+            const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
+            const ed = editorRef.current ?? (view as any).editor ?? editor;
+            if (ed) uploadAndInsertImage(file, ed, coords?.pos);
+            return true;
+          }
+        }
+        return false;
+      },
     },
     onUpdate: ({ editor }) => {
       const html = editor.getHTML();
@@ -78,6 +146,8 @@ export function DocEditor({
       onBlur?.(md, html);
     },
   });
+
+  editorRef.current = editor;
 
   // Sync editor editable state
   useEffect(() => {
