@@ -893,54 +893,56 @@ export default function DocViewPage() {
               {activePageData?.coverImage ? (
                 <div className={cn("group relative h-44 w-full transition-all", activePageData.coverImage)}>
                   <div className="absolute inset-0 bg-black/10" />
-                  <div className="absolute bottom-3 right-6 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Popover.Root>
-                      <Popover.Trigger asChild>
-                        <button className="flex items-center gap-1 rounded-md bg-black/50 backdrop-blur-md px-2.5 py-1 text-xs font-medium text-white hover:bg-black/70 transition">
-                          <Palette className="h-3.5 w-3.5" />
-                          <span>Change cover</span>
-                        </button>
-                      </Popover.Trigger>
-                      <Popover.Portal>
-                        <Popover.Content
-                          sideOffset={6}
-                          align="end"
-                          className="z-50 w-64 rounded-xl border border-cu-border bg-cu-panel p-2 shadow-2xl text-cu-text"
-                        >
-                          <div className="text-[11px] font-semibold text-cu-text-tertiary px-1 pb-1.5 uppercase tracking-wider">
-                            Select Gradient
-                          </div>
-                          <div className="grid grid-cols-5 gap-1.5 py-1">
-                            {COVER_PRESETS.map((c) => (
+                  {isEditing && (
+                    <div className="absolute bottom-3 right-6 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Popover.Root>
+                        <Popover.Trigger asChild>
+                          <button className="flex items-center gap-1 rounded-md bg-black/50 backdrop-blur-md px-2.5 py-1 text-xs font-medium text-white hover:bg-black/70 transition cursor-pointer">
+                            <Palette className="h-3.5 w-3.5" />
+                            <span>Change cover</span>
+                          </button>
+                        </Popover.Trigger>
+                        <Popover.Portal>
+                          <Popover.Content
+                            sideOffset={6}
+                            align="end"
+                            className="z-50 w-64 rounded-xl border border-cu-border bg-cu-panel p-2 shadow-2xl text-cu-text"
+                          >
+                            <div className="text-[11px] font-semibold text-cu-text-tertiary px-1 pb-1.5 uppercase tracking-wider">
+                              Select Gradient
+                            </div>
+                            <div className="grid grid-cols-5 gap-1.5 py-1">
+                              {COVER_PRESETS.map((c) => (
+                                <button
+                                  key={c.id}
+                                  onClick={() => handleSelectCover(c.class)}
+                                  className={cn("h-8 rounded-lg border border-white/20 transition hover:scale-105 cursor-pointer", c.class)}
+                                  title={c.label}
+                                />
+                              ))}
+                            </div>
+                            <div className="border-t border-cu-border mt-2 pt-1.5">
                               <button
-                                key={c.id}
-                                onClick={() => handleSelectCover(c.class)}
-                                className={cn("h-8 rounded-lg border border-white/20 transition hover:scale-105", c.class)}
-                                title={c.label}
-                              />
-                            ))}
-                          </div>
-                          <div className="border-t border-cu-border mt-2 pt-1.5">
-                            <button
-                              onClick={handleRemoveCover}
-                              className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs text-cu-urgent hover:bg-cu-urgent/10"
-                            >
-                              <Trash2 className="h-3 w-3" />
-                              <span>Remove cover</span>
-                            </button>
-                          </div>
-                        </Popover.Content>
-                      </Popover.Portal>
-                    </Popover.Root>
+                                onClick={handleRemoveCover}
+                                className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs text-cu-urgent hover:bg-cu-urgent/10 cursor-pointer"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                                <span>Remove cover</span>
+                              </button>
+                            </div>
+                          </Popover.Content>
+                        </Popover.Portal>
+                      </Popover.Root>
 
-                    <button
-                      onClick={handleRemoveCover}
-                      className="rounded-md bg-black/50 backdrop-blur-md p-1 text-white hover:bg-black/70 transition"
-                      title="Remove cover"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
+                      <button
+                        onClick={handleRemoveCover}
+                        className="rounded-md bg-black/50 backdrop-blur-md p-1 text-white hover:bg-black/70 transition cursor-pointer"
+                        title="Remove cover"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : null}
 
@@ -950,47 +952,55 @@ export default function DocViewPage() {
                   {/* Icon badge if exists */}
                   {activePageData?.icon ? (
                     <div className="mb-3 flex items-center gap-2">
-                      <Popover.Root>
-                        <Popover.Trigger asChild>
-                          <button
-                            className="flex h-16 w-16 items-center justify-center rounded-2xl bg-cu-panel text-3xl shadow-md border border-cu-border transition hover:bg-cu-hover hover:scale-105 select-none"
-                            title="Change icon"
-                          >
-                            <span>{activePageData.icon}</span>
-                          </button>
-                        </Popover.Trigger>
-                        <Popover.Portal>
-                          <Popover.Content
-                            sideOffset={8}
-                            align="start"
-                            className="z-50 w-64 rounded-xl border border-cu-border bg-cu-panel p-2.5 shadow-2xl text-cu-text"
-                          >
-                            <div className="text-[11px] font-semibold text-cu-text-tertiary px-1 pb-1.5 uppercase tracking-wider">
-                              Choose an icon
-                            </div>
-                            <div className="grid grid-cols-6 gap-1 py-1">
-                              {ICON_PRESETS.map((ic) => (
+                      {isEditing ? (
+                        <Popover.Root>
+                          <Popover.Trigger asChild>
+                            <button
+                              className="flex h-16 w-16 items-center justify-center rounded-2xl bg-cu-panel text-3xl shadow-md border border-cu-border transition hover:bg-cu-hover hover:scale-105 select-none cursor-pointer"
+                              title="Change icon"
+                            >
+                              <span>{activePageData.icon}</span>
+                            </button>
+                          </Popover.Trigger>
+                          <Popover.Portal>
+                            <Popover.Content
+                              sideOffset={8}
+                              align="start"
+                              className="z-50 w-64 rounded-xl border border-cu-border bg-cu-panel p-2.5 shadow-2xl text-cu-text"
+                            >
+                              <div className="text-[11px] font-semibold text-cu-text-tertiary px-1 pb-1.5 uppercase tracking-wider">
+                                Choose an icon
+                              </div>
+                              <div className="grid grid-cols-6 gap-1 py-1">
+                                {ICON_PRESETS.map((ic) => (
+                                  <button
+                                    key={ic}
+                                    onClick={() => handleSelectIcon(ic)}
+                                    className="flex h-8 w-8 items-center justify-center rounded-lg text-lg hover:bg-cu-hover transition cursor-pointer"
+                                  >
+                                    {ic}
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="border-t border-cu-border mt-2 pt-1.5">
                                 <button
-                                  key={ic}
-                                  onClick={() => handleSelectIcon(ic)}
-                                  className="flex h-8 w-8 items-center justify-center rounded-lg text-lg hover:bg-cu-hover transition"
+                                  onClick={handleRemoveIcon}
+                                  className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs text-cu-urgent hover:bg-cu-urgent/10 cursor-pointer"
                                 >
-                                  {ic}
+                                  <Trash2 className="h-3 w-3" />
+                                  <span>Remove icon</span>
                                 </button>
-                              ))}
-                            </div>
-                            <div className="border-t border-cu-border mt-2 pt-1.5">
-                              <button
-                                onClick={handleRemoveIcon}
-                                className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs text-cu-urgent hover:bg-cu-urgent/10"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                                <span>Remove icon</span>
-                              </button>
-                            </div>
-                          </Popover.Content>
-                        </Popover.Portal>
-                      </Popover.Root>
+                              </div>
+                            </Popover.Content>
+                          </Popover.Portal>
+                        </Popover.Root>
+                      ) : (
+                        <div
+                          className="flex h-16 w-16 items-center justify-center rounded-2xl bg-cu-panel text-3xl shadow-sm border border-cu-border select-none"
+                        >
+                          <span>{activePageData.icon}</span>
+                        </div>
+                      )}
                     </div>
                   ) : null}
 
