@@ -34,6 +34,15 @@ export function parseInlineMarkdown(text: string): string {
     return `\u0000INLINECODE${idx}\u0000`;
   });
 
+  // 1b. Images ![alt](url) before links [text](url)
+  parsed = parsed.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, rawMeta, url) => {
+    let caption = rawMeta.trim();
+    if (rawMeta.includes("|")) {
+      caption = rawMeta.split("|")[0].trim();
+    }
+    return `<img src="${escapeHtml(url)}" alt="${escapeHtml(caption)}" />`;
+  });
+
   // 2. Links [text](url)
   parsed = parsed.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
 
@@ -163,6 +172,32 @@ export function markdownToHtml(markdown: string): string {
       continue;
     }
 
+    // Image Block: ![alt|align:center|width:50%](url) or ![alt](url)
+    const imgMatch = trimmed.match(/^!\[(.*?)\]\(([^)]+)\)$/);
+    if (imgMatch) {
+      flushAll();
+      const rawMeta = imgMatch[1];
+      const url = imgMatch[2];
+      let caption = rawMeta.trim();
+      let align = "center";
+      let width = "100%";
+
+      if (rawMeta.includes("|")) {
+        const parts = rawMeta.split("|");
+        caption = parts[0].trim();
+        for (let p = 1; p < parts.length; p++) {
+          const part = parts[p].trim();
+          if (part.startsWith("align:")) align = part.replace("align:", "").trim();
+          if (part.startsWith("width:")) width = part.replace("width:", "").trim();
+        }
+      }
+
+      htmlParts.push(
+        `<div data-type="image-block" data-src="${escapeHtml(url)}" data-alt="${escapeHtml(caption)}" data-caption="${escapeHtml(caption)}" data-align="${escapeHtml(align)}" data-width="${escapeHtml(width)}"><img src="${escapeHtml(url)}" alt="${escapeHtml(caption)}" /></div>`
+      );
+      continue;
+    }
+
     // Headings: #, ##, ###
     const headingMatch = rawLine.match(/^(#{1,6})\s+(.*)$/);
     if (headingMatch) {
@@ -260,6 +295,7 @@ export function htmlToMarkdown(html: string): string {
   let result = html.replace(/\r\n/g, "\n");
 
   const codeBlocks: string[] = [];
+  const imageBlocks: string[] = [];
 
   // 0. Preserve and extract Mermaid diagram blocks (div[data-type="mermaid-block"])
   result = result.replace(
@@ -292,6 +328,62 @@ export function htmlToMarkdown(html: string): string {
       return `\n\n\u0000CODEBLOCK${idx}\u0000\n\n`;
     }
   );
+
+  // 1b. Preserve and extract Image blocks (div[data-type="image-block"])
+  result = result.replace(
+    /<div[^>]*data-type=["']image-block["'][^>]*>[\s\S]*?<\/div>/gi,
+    (block) => {
+      const openingTagMatch = block.match(/<div\b([^>]*)>/i);
+      const attrs = openingTagMatch ? openingTagMatch[1] : "";
+
+      const srcMatch = attrs.match(/data-src=["']([^"']*)["']/i);
+      const captionMatch = attrs.match(/data-caption=["']([^"']*)["']/i);
+      const altMatch = attrs.match(/data-alt=["']([^"']*)["']/i);
+      const alignMatch = attrs.match(/data-align=["']([^"']*)["']/i);
+      const widthMatch = attrs.match(/data-width=["']([^"']*)["']/i);
+
+      let src = srcMatch ? srcMatch[1] : "";
+      let caption = captionMatch ? captionMatch[1] : (altMatch ? altMatch[1] : "");
+      const align = alignMatch ? alignMatch[1] : "center";
+      const width = widthMatch ? widthMatch[1] : "100%";
+
+      // Fallback to inner img tag if src or caption missing on div
+      if (!src || !caption) {
+        const imgMatch = block.match(/<img\b([^>]*)\/?>/i);
+        if (imgMatch) {
+          const is = imgMatch[1].match(/src=["']([^"']*)["']/i);
+          const ia = imgMatch[1].match(/alt=["']([^"']*)["']/i);
+          if (!src && is) src = is[1];
+          if (!caption && ia) caption = ia[1];
+        }
+      }
+
+      const cap = unescapeHtml(caption || "");
+      const al = align || "center";
+      const w = width || "100%";
+      const meta = (al !== "center" || (w !== "100%" && w !== "")) ? `${cap}|align:${al}|width:${w}` : cap;
+      const idx = imageBlocks.length;
+      imageBlocks.push(`![${meta}](${src})`);
+      return `\n\n\u0000IMAGEBLOCK${idx}\u0000\n\n`;
+    }
+  );
+
+  // 1c. Preserve and convert standalone <img> tags to markdown images
+  result = result.replace(/<img\b([^>]*)\/?>/gi, (_, attrs) => {
+    const srcMatch = attrs.match(/src=["']([^"']*)["']/i);
+    if (!srcMatch) return "";
+    const src = srcMatch[1];
+    const altMatch = attrs.match(/alt=["']([^"']*)["']/i);
+    const alt = unescapeHtml(altMatch ? altMatch[1] : "");
+    const alignMatch = attrs.match(/data-align=["']([^"']*)["']/i);
+    const widthMatch = attrs.match(/(?:data-width|width)=["']([^"']*)["']/i);
+    const al = alignMatch ? alignMatch[1] : "center";
+    const w = widthMatch ? widthMatch[1] : "100%";
+    const meta = (al !== "center" || (w !== "100%" && w !== "")) ? `${alt}|align:${al}|width:${w}` : alt;
+    const idx = imageBlocks.length;
+    imageBlocks.push(`![${meta}](${src})`);
+    return `\u0000IMAGEBLOCK${idx}\u0000`;
+  });
 
   // 2. Headings
   result = result.replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gi, "\n\n# $1\n\n");
@@ -395,9 +487,12 @@ export function htmlToMarkdown(html: string): string {
   // 10. Decode entities
   result = unescapeHtml(result);
 
-  // 11. Restore code blocks
+  // 11. Restore code blocks & image blocks
   result = result.replace(/\u0000CODEBLOCK(\d+)\u0000/g, (_, idx) => {
     return codeBlocks[Number(idx)] ?? "";
+  });
+  result = result.replace(/\u0000IMAGEBLOCK(\d+)\u0000/g, (_, idx) => {
+    return imageBlocks[Number(idx)] ?? "";
   });
 
   // 12. Clean up whitespace: collapse 3+ newlines to 2 newlines
