@@ -48,7 +48,13 @@ export function DocEditor({
   const activeMode = propMode ?? internalMode;
 
   const [rawMarkdown, setRawMarkdown] = useState<string>(markdown ?? "");
+  const rawMarkdownRef = useRef<string>(rawMarkdown);
   const lastMarkdownProp = useRef<string>(markdown ?? "");
+  const lastMode = useRef<"visual" | "markdown">(activeMode);
+
+  useEffect(() => {
+    rawMarkdownRef.current = rawMarkdown;
+  }, [rawMarkdown]);
 
   const editor = useEditor({
     extensions: [
@@ -73,6 +79,7 @@ export function DocEditor({
       const md = htmlToMarkdown(html);
       lastMarkdownProp.current = md;
       setRawMarkdown(md);
+      rawMarkdownRef.current = md;
       onChange?.(md, html);
     },
     onBlur: ({ editor }) => {
@@ -94,6 +101,7 @@ export function DocEditor({
     if (markdown !== lastMarkdownProp.current) {
       lastMarkdownProp.current = markdown;
       setRawMarkdown(markdown);
+      rawMarkdownRef.current = markdown;
       if (editor) {
         const nextHtml = markdownToHtml(markdown);
         if (editor.getHTML() !== nextHtml) {
@@ -103,25 +111,32 @@ export function DocEditor({
     }
   }, [markdown, editor]);
 
-  // Handle mode toggling
-  const setMode = (nextMode: "visual" | "markdown") => {
-    if (nextMode === activeMode) return;
+  // Sync content when activeMode changes (supports both internal toggle and external propMode changes)
+  useEffect(() => {
+    if (activeMode !== lastMode.current) {
+      const prevMode = lastMode.current;
+      lastMode.current = activeMode;
 
-    if (nextMode === "markdown") {
-      // Switching from visual to markdown: extract latest markdown from editor
-      if (editor) {
-        const html = editor.getHTML();
-        const md = htmlToMarkdown(html);
-        setRawMarkdown(md);
-      }
-    } else {
-      // Switching from markdown to visual: load raw markdown into editor
-      if (editor) {
-        const html = markdownToHtml(rawMarkdown);
-        editor.commands.setContent(html, { emitUpdate: false });
+      if (activeMode === "markdown" && prevMode === "visual") {
+        if (editor) {
+          const html = editor.getHTML();
+          const md = htmlToMarkdown(html);
+          setRawMarkdown(md);
+          lastMarkdownProp.current = md;
+          rawMarkdownRef.current = md;
+        }
+      } else if (activeMode === "visual" && prevMode === "markdown") {
+        if (editor) {
+          const html = markdownToHtml(rawMarkdownRef.current);
+          editor.commands.setContent(html, { emitUpdate: false });
+        }
       }
     }
+  }, [activeMode, editor]);
 
+  // Handle mode toggling from UI buttons
+  const setMode = (nextMode: "visual" | "markdown") => {
+    if (nextMode === activeMode) return;
     setInternalMode(nextMode);
     onModeChange?.(nextMode);
   };

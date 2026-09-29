@@ -182,6 +182,7 @@ export function createSlashSuggestion(): Omit<SuggestionOptions<CommandItem>, "e
           command = props.command;
           selected = 0;
           rect = props.clientRect?.() ?? null;
+          if (popup) popup.remove();
           popup = document.createElement("div");
           popup.className =
             "cu-slash-popup fixed z-50 flex max-h-[320px] w-72 flex-col overflow-y-auto rounded-lg border border-cu-border bg-cu-panel p-1.5 shadow-xl text-[13px] text-cu-text";
