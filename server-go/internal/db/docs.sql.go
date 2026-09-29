@@ -57,9 +57,44 @@ func (q *Queries) CreateDoc(ctx context.Context, arg CreateDocParams) (Doc, erro
 	return i, err
 }
 
+const createDocComment = `-- name: CreateDocComment :one
+INSERT INTO "DocComment" (id, doc_page_id, user_id, body, parent_id)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, doc_page_id, user_id, body, parent_id, created_at, updated_at
+`
+
+type CreateDocCommentParams struct {
+	ID        string      `json:"id"`
+	DocPageID string      `json:"doc_page_id"`
+	UserID    string      `json:"user_id"`
+	Body      string      `json:"body"`
+	ParentID  pgtype.Text `json:"parent_id"`
+}
+
+func (q *Queries) CreateDocComment(ctx context.Context, arg CreateDocCommentParams) (DocComment, error) {
+	row := q.db.QueryRow(ctx, createDocComment,
+		arg.ID,
+		arg.DocPageID,
+		arg.UserID,
+		arg.Body,
+		arg.ParentID,
+	)
+	var i DocComment
+	err := row.Scan(
+		&i.ID,
+		&i.DocPageID,
+		&i.UserID,
+		&i.Body,
+		&i.ParentID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createDocPage = `-- name: CreateDocPage :one
 INSERT INTO "DocPage" (id, doc_id, parent_page_id, title, content_markdown, content_html, icon, cover_image, position)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, doc_id, parent_page_id, title, content_markdown, content_html, icon, cover_image, position, created_at, updated_at
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, doc_id, parent_page_id, title, content_markdown, content_html, icon, cover_image, position, created_at, updated_at, is_published, has_draft, draft_markdown, draft_html
 `
 
 type CreateDocPageParams struct {
@@ -99,6 +134,10 @@ func (q *Queries) CreateDocPage(ctx context.Context, arg CreateDocPageParams) (D
 		&i.Position,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsPublished,
+		&i.HasDraft,
+		&i.DraftMarkdown,
+		&i.DraftHtml,
 	)
 	return i, err
 }
@@ -112,6 +151,15 @@ func (q *Queries) DeleteDoc(ctx context.Context, id string) error {
 	return err
 }
 
+const deleteDocComment = `-- name: DeleteDocComment :exec
+DELETE FROM "DocComment" WHERE id = $1
+`
+
+func (q *Queries) DeleteDocComment(ctx context.Context, id string) error {
+	_, err := q.db.Exec(ctx, deleteDocComment, id)
+	return err
+}
+
 const deleteDocPage = `-- name: DeleteDocPage :exec
 DELETE FROM "DocPage" WHERE id = $1
 `
@@ -119,6 +167,39 @@ DELETE FROM "DocPage" WHERE id = $1
 func (q *Queries) DeleteDocPage(ctx context.Context, id string) error {
 	_, err := q.db.Exec(ctx, deleteDocPage, id)
 	return err
+}
+
+const discardDocPageDraft = `-- name: DiscardDocPageDraft :one
+UPDATE "DocPage"
+SET draft_markdown = NULL,
+    draft_html = NULL,
+    has_draft = false,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, doc_id, parent_page_id, title, content_markdown, content_html, icon, cover_image, position, created_at, updated_at, is_published, has_draft, draft_markdown, draft_html
+`
+
+func (q *Queries) DiscardDocPageDraft(ctx context.Context, id string) (DocPage, error) {
+	row := q.db.QueryRow(ctx, discardDocPageDraft, id)
+	var i DocPage
+	err := row.Scan(
+		&i.ID,
+		&i.DocID,
+		&i.ParentPageID,
+		&i.Title,
+		&i.ContentMarkdown,
+		&i.ContentHtml,
+		&i.Icon,
+		&i.CoverImage,
+		&i.Position,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.IsPublished,
+		&i.HasDraft,
+		&i.DraftMarkdown,
+		&i.DraftHtml,
+	)
+	return i, err
 }
 
 const getDocByID = `-- name: GetDocByID :one
@@ -145,7 +226,7 @@ func (q *Queries) GetDocByID(ctx context.Context, id string) (Doc, error) {
 }
 
 const getDocPageByID = `-- name: GetDocPageByID :one
-SELECT id, doc_id, parent_page_id, title, content_markdown, content_html, icon, cover_image, position, created_at, updated_at FROM "DocPage" WHERE id = $1 LIMIT 1
+SELECT id, doc_id, parent_page_id, title, content_markdown, content_html, icon, cover_image, position, created_at, updated_at, is_published, has_draft, draft_markdown, draft_html FROM "DocPage" WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) GetDocPageByID(ctx context.Context, id string) (DocPage, error) {
@@ -163,12 +244,70 @@ func (q *Queries) GetDocPageByID(ctx context.Context, id string) (DocPage, error
 		&i.Position,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsPublished,
+		&i.HasDraft,
+		&i.DraftMarkdown,
+		&i.DraftHtml,
 	)
 	return i, err
 }
 
+const listDocCommentsByPage = `-- name: ListDocCommentsByPage :many
+SELECT c.id, c.doc_page_id, c.user_id, c.body, c.parent_id, c.created_at, c.updated_at, u.name as user_name, u.email as user_email, u.color as user_color, u."avatarUrl" as user_avatar_url
+FROM "DocComment" c
+JOIN "User" u ON c.user_id = u.id
+WHERE c.doc_page_id = $1
+ORDER BY c.created_at ASC
+`
+
+type ListDocCommentsByPageRow struct {
+	ID            string             `json:"id"`
+	DocPageID     string             `json:"doc_page_id"`
+	UserID        string             `json:"user_id"`
+	Body          string             `json:"body"`
+	ParentID      pgtype.Text        `json:"parent_id"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	UserName      string             `json:"user_name"`
+	UserEmail     string             `json:"user_email"`
+	UserColor     string             `json:"user_color"`
+	UserAvatarUrl pgtype.Text        `json:"user_avatar_url"`
+}
+
+func (q *Queries) ListDocCommentsByPage(ctx context.Context, docPageID string) ([]ListDocCommentsByPageRow, error) {
+	rows, err := q.db.Query(ctx, listDocCommentsByPage, docPageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDocCommentsByPageRow{}
+	for rows.Next() {
+		var i ListDocCommentsByPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DocPageID,
+			&i.UserID,
+			&i.Body,
+			&i.ParentID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.UserName,
+			&i.UserEmail,
+			&i.UserColor,
+			&i.UserAvatarUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDocPagesByDocID = `-- name: ListDocPagesByDocID :many
-SELECT id, doc_id, parent_page_id, title, icon, cover_image, position, created_at, updated_at
+SELECT id, doc_id, parent_page_id, title, icon, cover_image, position, created_at, updated_at, is_published, has_draft
 FROM "DocPage"
 WHERE doc_id = $1
 ORDER BY position ASC, created_at ASC
@@ -184,6 +323,8 @@ type ListDocPagesByDocIDRow struct {
 	Position     float64            `json:"position"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	IsPublished  bool               `json:"is_published"`
+	HasDraft     bool               `json:"has_draft"`
 }
 
 func (q *Queries) ListDocPagesByDocID(ctx context.Context, docID string) ([]ListDocPagesByDocIDRow, error) {
@@ -205,6 +346,8 @@ func (q *Queries) ListDocPagesByDocID(ctx context.Context, docID string) ([]List
 			&i.Position,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.IsPublished,
+			&i.HasDraft,
 		); err != nil {
 			return nil, err
 		}
@@ -340,6 +483,42 @@ func (q *Queries) ListDocsByWorkspace(ctx context.Context, workspaceID string) (
 	return items, nil
 }
 
+const publishDocPage = `-- name: PublishDocPage :one
+UPDATE "DocPage"
+SET content_markdown = COALESCE(draft_markdown, content_markdown),
+    content_html = COALESCE(draft_html, content_html),
+    draft_markdown = NULL,
+    draft_html = NULL,
+    has_draft = false,
+    is_published = true,
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, doc_id, parent_page_id, title, content_markdown, content_html, icon, cover_image, position, created_at, updated_at, is_published, has_draft, draft_markdown, draft_html
+`
+
+func (q *Queries) PublishDocPage(ctx context.Context, id string) (DocPage, error) {
+	row := q.db.QueryRow(ctx, publishDocPage, id)
+	var i DocPage
+	err := row.Scan(
+		&i.ID,
+		&i.DocID,
+		&i.ParentPageID,
+		&i.Title,
+		&i.ContentMarkdown,
+		&i.ContentHtml,
+		&i.Icon,
+		&i.CoverImage,
+		&i.Position,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.IsPublished,
+		&i.HasDraft,
+		&i.DraftMarkdown,
+		&i.DraftHtml,
+	)
+	return i, err
+}
+
 const updateDoc = `-- name: UpdateDoc :one
 UPDATE "Doc"
 SET title = COALESCE($1, title),
@@ -396,9 +575,13 @@ SET title = COALESCE($1, title),
     cover_image = COALESCE($5, cover_image),
     position = COALESCE($6, position),
     parent_page_id = COALESCE($7, parent_page_id),
+    is_published = COALESCE($8, is_published),
+    has_draft = COALESCE($9, has_draft),
+    draft_markdown = COALESCE($10, draft_markdown),
+    draft_html = COALESCE($11, draft_html),
     updated_at = NOW()
-WHERE id = $8
-RETURNING id, doc_id, parent_page_id, title, content_markdown, content_html, icon, cover_image, position, created_at, updated_at
+WHERE id = $12
+RETURNING id, doc_id, parent_page_id, title, content_markdown, content_html, icon, cover_image, position, created_at, updated_at, is_published, has_draft, draft_markdown, draft_html
 `
 
 type UpdateDocPageParams struct {
@@ -409,6 +592,10 @@ type UpdateDocPageParams struct {
 	CoverImage      pgtype.Text   `json:"cover_image"`
 	Position        pgtype.Float8 `json:"position"`
 	ParentPageID    pgtype.Text   `json:"parent_page_id"`
+	IsPublished     pgtype.Bool   `json:"is_published"`
+	HasDraft        pgtype.Bool   `json:"has_draft"`
+	DraftMarkdown   pgtype.Text   `json:"draft_markdown"`
+	DraftHtml       pgtype.Text   `json:"draft_html"`
 	ID              string        `json:"id"`
 }
 
@@ -421,6 +608,10 @@ func (q *Queries) UpdateDocPage(ctx context.Context, arg UpdateDocPageParams) (D
 		arg.CoverImage,
 		arg.Position,
 		arg.ParentPageID,
+		arg.IsPublished,
+		arg.HasDraft,
+		arg.DraftMarkdown,
+		arg.DraftHtml,
 		arg.ID,
 	)
 	var i DocPage
@@ -436,6 +627,10 @@ func (q *Queries) UpdateDocPage(ctx context.Context, arg UpdateDocPageParams) (D
 		&i.Position,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsPublished,
+		&i.HasDraft,
+		&i.DraftMarkdown,
+		&i.DraftHtml,
 	)
 	return i, err
 }

@@ -332,6 +332,16 @@ type Doc struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type DocComment struct {
+	ID        string             `json:"id"`
+	DocPageID string             `json:"doc_page_id"`
+	UserID    string             `json:"user_id"`
+	Body      string             `json:"body"`
+	ParentID  pgtype.Text        `json:"parent_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
 type DocPage struct {
 	ID              string             `json:"id"`
 	DocID           string             `json:"doc_id"`
@@ -344,6 +354,10 @@ type DocPage struct {
 	Position        float64            `json:"position"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	IsPublished     bool               `json:"is_published"`
+	HasDraft        bool               `json:"has_draft"`
+	DraftMarkdown   pgtype.Text        `json:"draft_markdown"`
+	DraftHtml       pgtype.Text        `json:"draft_html"`
 }
 
 type Favorite struct {
