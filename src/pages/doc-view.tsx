@@ -24,6 +24,7 @@ import {
   Smile,
   Image as ImageIcon,
   Palette,
+  MessageSquare,
 } from "lucide-react";
 import {
   useDoc,
@@ -729,6 +730,18 @@ export default function DocViewPage() {
                   Unpublished changes
                 </span>
               )}
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById("doc-comments");
+                  el?.scrollIntoView({ behavior: "smooth" });
+                }}
+                className="flex items-center gap-1.5 rounded-md bg-cu-panel border border-cu-border hover:bg-cu-hover px-2.5 py-1 text-xs font-medium text-cu-text-secondary hover:text-cu-text transition shadow-xs cursor-pointer"
+                title="Scroll down to comments"
+              >
+                <MessageSquare className="h-3.5 w-3.5 text-cu-purple" />
+                <span>Comments</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setIsEditing(true)}

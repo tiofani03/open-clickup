@@ -66,9 +66,9 @@ export function DocComments({
   const topLevel = comments.filter((c) => !c.parentId);
 
   return (
-    <div className="mt-16 pt-8 border-t border-cu-border max-w-3xl mx-auto w-full">
+    <div id="doc-comments" className="mt-16 pt-8 border-t border-cu-border max-w-3xl mx-auto w-full scroll-mt-12">
       <div className="flex items-center gap-2 mb-6 text-cu-text">
-        <MessageSquare className="h-4 w-4 text-cu-text-tertiary" />
+        <MessageSquare className="h-4 w-4 text-cu-purple" />
         <h3 className="text-sm font-semibold">Comments</h3>
         <span className="text-xs text-cu-text-tertiary bg-cu-panel border border-cu-border px-2 py-0.5 rounded-full font-medium">
           {comments.length}
@@ -85,7 +85,7 @@ export function DocComments({
           }}
           size="md"
         />
-        <div className="flex-1 bg-cu-panel border border-cu-border rounded-lg shadow-sm focus-within:border-cu-primary focus-within:ring-1 focus-within:ring-cu-primary transition-all">
+        <div className="flex-1 bg-cu-panel border border-cu-border rounded-lg shadow-xs focus-within:border-cu-purple focus-within:ring-1 focus-within:ring-cu-purple transition-all">
           <textarea
             value={newCommentBody}
             onChange={(e) => setNewCommentBody(e.target.value)}
@@ -95,15 +95,18 @@ export function DocComments({
                 handleCreateTopLevel();
               }
             }}
-            placeholder="Write a comment... (Cmd+Enter to post)"
+            placeholder="Write a comment... (Cmd+Enter or Ctrl+Enter to post)"
             rows={2}
             className="w-full bg-transparent px-3 py-2 text-sm text-cu-text placeholder:text-cu-text-tertiary focus:outline-none resize-none"
           />
-          <div className="flex justify-end items-center px-3 py-1.5 border-t border-cu-border/50 bg-cu-subtle/30 rounded-b-lg">
+          <div className="flex justify-between items-center px-3 py-1.5 border-t border-cu-border/50 bg-cu-subtle/30 rounded-b-lg">
+            <span className="text-[11px] text-cu-text-tertiary">
+              Press <kbd className="font-mono bg-cu-bg border border-cu-border px-1 rounded text-[10px]">Ctrl+Enter</kbd> to submit
+            </span>
             <button
               onClick={handleCreateTopLevel}
               disabled={!newCommentBody.trim() || createComment.isPending}
-              className="inline-flex items-center gap-1.5 px-3 py-1 bg-cu-primary hover:bg-cu-primary-hover disabled:opacity-50 text-white rounded text-xs font-medium transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1 bg-cu-purple hover:bg-cu-purple-dark disabled:opacity-50 text-white rounded text-xs font-medium transition-colors cursor-pointer"
             >
               <Send className="h-3 w-3" />
               Comment
@@ -220,9 +223,9 @@ export function DocComments({
 
                     {/* Inline Reply Composer */}
                     {replyingToId === comment.id && (
-                      <div className="mt-3 flex gap-2 pl-4 border-l-2 border-cu-primary/50">
-                        <CornerDownRight className="h-3.5 w-3.5 text-cu-primary shrink-0 mt-2" />
-                        <div className="flex-1 bg-cu-panel border border-cu-border rounded-md focus-within:border-cu-primary">
+                      <div className="mt-3 flex gap-2 pl-4 border-l-2 border-cu-purple/50">
+                        <CornerDownRight className="h-3.5 w-3.5 text-cu-purple shrink-0 mt-2" />
+                        <div className="flex-1 bg-cu-panel border border-cu-border rounded-md focus-within:border-cu-purple">
                           <textarea
                             value={replyBody}
                             onChange={(e) => setReplyBody(e.target.value)}
@@ -232,7 +235,7 @@ export function DocComments({
                                 handleCreateReply(comment.id);
                               }
                             }}
-                            placeholder="Write a reply... (Cmd+Enter to post)"
+                            placeholder="Write a reply... (Cmd+Enter or Ctrl+Enter to post)"
                             rows={1}
                             autoFocus
                             className="w-full bg-transparent px-2.5 py-1.5 text-xs text-cu-text placeholder:text-cu-text-tertiary focus:outline-none resize-none"
@@ -250,7 +253,7 @@ export function DocComments({
                             <button
                               onClick={() => handleCreateReply(comment.id)}
                               disabled={!replyBody.trim() || createComment.isPending}
-                              className="px-2 py-0.5 bg-cu-primary hover:bg-cu-primary-hover disabled:opacity-50 text-white rounded text-[11px] font-medium cursor-pointer"
+                              className="px-2.5 py-0.5 bg-cu-purple hover:bg-cu-purple-dark disabled:opacity-50 text-white rounded text-[11px] font-medium cursor-pointer"
                             >
                               Reply
                             </button>
