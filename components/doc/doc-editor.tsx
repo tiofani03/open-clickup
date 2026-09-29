@@ -8,6 +8,7 @@ import { cn } from "../../lib/utils";
 import { markdownToHtml, htmlToMarkdown } from "../../lib/markdown";
 import { SlashCommand } from "./slash-command";
 import { FloatingToolbar } from "./floating-toolbar";
+import { MermaidExtension } from "./mermaid/mermaid-extension";
 
 export interface DocEditorProps {
   markdown: string;
@@ -51,6 +52,7 @@ export function DocEditor({
         placeholder,
       }),
       SlashCommand,
+      MermaidExtension,
     ],
     content: markdownToHtml(markdown ?? ""),
     editable: !readOnly,

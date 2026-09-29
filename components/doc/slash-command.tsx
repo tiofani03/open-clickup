@@ -100,6 +100,30 @@ const COMMAND_ITEMS: CommandItem[] = [
     },
   },
   {
+    title: "Mermaid Diagram",
+    description: "Flowcharts, sequence diagrams & architecture with drag-n-drop builder",
+    category: "Advanced blocks",
+    iconSvg:
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><rect x="9" y="15" width="6" height="6" rx="1"/><path d="M6 9v3a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V9"/><path d="M12 13v2"/></svg>',
+    command: ({ editor, range }) => {
+      const defaultDiagram = `flowchart TD
+    A([Start]) --> B[Process Step]
+    B --> C{Decision}
+    C -- Yes --> D[(Database)]
+    C -- No --> E([Done])
+    D --> E`;
+      editor
+        .chain()
+        .focus()
+        .deleteRange(range)
+        .insertContent({
+          type: "mermaidBlock",
+          attrs: { code: defaultDiagram },
+        })
+        .run();
+    },
+  },
+  {
     title: "Quote",
     description: "Capture a quote or highlight note",
     category: "Advanced blocks",
