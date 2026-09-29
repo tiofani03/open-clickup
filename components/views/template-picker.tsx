@@ -21,7 +21,7 @@ export function TemplatePicker({
     <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[1px]" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(440px,92vw)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl bg-cu-panel shadow-2xl outline-none">
+        <Dialog.Content className="fixed inset-0 z-50 m-auto h-fit max-h-[85vh] w-[min(440px,92vw)] overflow-hidden rounded-xl border border-cu-border bg-cu-panel shadow-2xl outline-none">
           <div className="flex items-center justify-between border-b border-cu-border px-4 py-3">
             <Dialog.Title className="text-[14px] font-semibold text-cu-text">New from template</Dialog.Title>
             <Dialog.Close className="rounded p-1 text-cu-text-tertiary hover:bg-cu-hover">

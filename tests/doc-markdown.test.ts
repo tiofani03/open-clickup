@@ -212,4 +212,62 @@ describe("lib/markdown", () => {
       expect(finalMarkdown).toContain("> Note: complete before Friday");
     });
   });
+
+  describe("edge cases & TipTap integration", () => {
+    it("handles links correctly in both directions", () => {
+      const md = "Visit [ClickUp](https://clickup.com) for details.";
+      const html = markdownToHtml(md);
+      expect(html).toBe('<p>Visit <a href="https://clickup.com">ClickUp</a> for details.</p>');
+      const restored = htmlToMarkdown(html);
+      expect(restored).toBe("Visit [ClickUp](https://clickup.com) for details.");
+    });
+
+    it("escapes special HTML entities inside code blocks and inline code", () => {
+      const md = "Use `<Component title=\"test\" & value={x < 10}>` in JSX";
+      const html = markdownToHtml(md);
+      expect(html).toContain("&lt;Component");
+      expect(html).toContain("&amp;");
+      expect(html).toContain("&quot;test&quot;");
+
+      const codeBlockMd = "```tsx\nconst el = <div id=\"root\">1 < 2 && true</div>;\n```";
+      const codeHtml = markdownToHtml(codeBlockMd);
+      expect(codeHtml).toContain("&lt;div");
+      expect(codeHtml).toContain("&amp;&amp;");
+
+      const backToMd = htmlToMarkdown(codeHtml);
+      expect(backToMd).toContain('const el = <div id="root">1 < 2 && true</div>;');
+    });
+
+    it("handles code block without language specifier", () => {
+      const md = "```\nplain code without lang\n```";
+      const html = markdownToHtml(md);
+      expect(html).toBe("<pre><code>plain code without lang</code></pre>");
+      const restored = htmlToMarkdown(html);
+      expect(restored).toBe("```\nplain code without lang\n```");
+    });
+
+    it("handles uppercase [X] checklist items", () => {
+      const md = "- [X] Uppercase task";
+      const html = markdownToHtml(md);
+      expect(html).toContain('data-checked="true"');
+      expect(html).toContain("Uppercase task");
+    });
+
+    it("parses TipTap DOM representation of task items", () => {
+      const tipTapHtml = `
+        <ul data-type="taskList">
+          <li data-type="taskItem" data-checked="false"><label><input type="checkbox"><span></span></label><div><p>Task 1</p></div></li>
+          <li data-type="taskItem" data-checked="true"><label><input type="checkbox" checked="checked"><span></span></label><div><p>Task 2</p></div></li>
+        </ul>
+      `;
+      const md = htmlToMarkdown(tipTapHtml);
+      expect(md).toBe("- [ ] Task 1\n- [x] Task 2");
+    });
+
+    it("handles empty and malformed markdown gracefully", () => {
+      expect(markdownToHtml("\n\n\n")).toBe("");
+      expect(htmlToMarkdown("<p><br></p>")).toBe("");
+      expect(htmlToMarkdown("<div></div>")).toBe("");
+    });
+  });
 });

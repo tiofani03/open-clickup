@@ -339,6 +339,10 @@ export type CreateDocPagePayload = {
   title?: string;
   parentPageId?: string | null;
   position?: number;
+  contentMarkdown?: string;
+  contentHtml?: string;
+  icon?: string | null;
+  coverImage?: string | null;
 };
 
 export type UpdateDocPagePayload = {

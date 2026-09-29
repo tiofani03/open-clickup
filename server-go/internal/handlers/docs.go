@@ -386,16 +386,25 @@ func (h *DocsHandler) CreateDocPage(c *fiber.Ctx) error {
 		}
 	}
 
+	var contentMarkdown string
+	if req.ContentMarkdown != nil {
+		contentMarkdown = *req.ContentMarkdown
+	}
+	var contentHtml string
+	if req.ContentHTML != nil {
+		contentHtml = *req.ContentHTML
+	}
+
 	pageID := cuid()
 	page, err := h.q.CreateDocPage(ctx, db.CreateDocPageParams{
 		ID:              pageID,
 		DocID:           docID,
 		ParentPageID:    foreignKeyText(req.ParentPageID),
 		Title:           title,
-		ContentMarkdown: "",
-		ContentHtml:     "",
-		Icon:            pgtype.Text{Valid: false},
-		CoverImage:      pgtype.Text{Valid: false},
+		ContentMarkdown: contentMarkdown,
+		ContentHtml:     contentHtml,
+		Icon:            stringPtrToText(req.Icon),
+		CoverImage:      stringPtrToText(req.CoverImage),
 		Position:        pos,
 	})
 	if err != nil {

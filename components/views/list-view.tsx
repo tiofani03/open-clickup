@@ -530,7 +530,7 @@ function TaskRow({
         <div className="flex justify-center py-2" onClick={(e) => e.stopPropagation()}>
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
-              <button className="hidden rounded p-1 text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-text group-hover:block">
+              <button className="rounded p-1 text-cu-text-tertiary opacity-0 hover:bg-cu-hover hover:text-cu-text group-hover:opacity-100 data-[state=open]:opacity-100 data-[state=open]:bg-cu-hover">
                 <Ellipsis className="h-4 w-4" />
               </button>
             </DropdownMenu.Trigger>

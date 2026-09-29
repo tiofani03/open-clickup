@@ -31,68 +31,11 @@
 **Interfaces:**
 - Produces: Tabel `"Doc"` dan `"DocPage"` pada PostgreSQL
 
-- [ ] **Step 1: Buat migration up SQL**
-  Tulis skrip DDL migrasi `server-go/db/migrations/000002_create_docs.up.sql`:
-  ```sql
-  CREATE TABLE "Doc" (
-      "id" TEXT PRIMARY KEY,
-      "workspace_id" TEXT NOT NULL REFERENCES "Workspace"("id") ON DELETE CASCADE,
-      "space_id" TEXT REFERENCES "Space"("id") ON DELETE CASCADE,
-      "folder_id" TEXT REFERENCES "Folder"("id") ON DELETE SET NULL,
-      "list_id" TEXT REFERENCES "List"("id") ON DELETE SET NULL,
-      "task_id" TEXT REFERENCES "Task"("id") ON DELETE SET NULL,
-      "title" TEXT NOT NULL DEFAULT 'Untitled Doc',
-      "created_by_id" TEXT NOT NULL REFERENCES "User"("id"),
-      "is_pinned" BOOLEAN NOT NULL DEFAULT FALSE,
-      "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      "updated_at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  );
-
-  CREATE INDEX "idx_doc_workspace" ON "Doc"("workspace_id");
-  CREATE INDEX "idx_doc_space" ON "Doc"("space_id");
-  CREATE INDEX "idx_doc_list" ON "Doc"("list_id");
-  CREATE INDEX "idx_doc_task" ON "Doc"("task_id");
-
-  CREATE TABLE "DocPage" (
-      "id" TEXT PRIMARY KEY,
-      "doc_id" TEXT NOT NULL REFERENCES "Doc"("id") ON DELETE CASCADE,
-      "parent_page_id" TEXT REFERENCES "DocPage"("id") ON DELETE CASCADE,
-      "title" TEXT NOT NULL DEFAULT 'Untitled Page',
-      "content_markdown" TEXT NOT NULL DEFAULT '',
-      "content_html" TEXT NOT NULL DEFAULT '',
-      "icon" TEXT,
-      "cover_image" TEXT,
-      "position" DOUBLE PRECISION NOT NULL DEFAULT 65535.0,
-      "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      "updated_at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  );
-
-  CREATE INDEX "idx_doc_page_doc" ON "DocPage"("doc_id");
-  CREATE INDEX "idx_doc_page_parent" ON "DocPage"("parent_page_id");
-  ```
-
-- [ ] **Step 2: Buat migration down SQL**
-  Tulis skrip rollback `server-go/db/migrations/000002_create_docs.down.sql`:
-  ```sql
-  DROP TABLE IF EXISTS "DocPage";
-  DROP TABLE IF EXISTS "Doc";
-  ```
-
-- [ ] **Step 3: Update `server-go/db/schema.sql`**
-  Append DDL tabel `"Doc"` dan `"DocPage"` ke file `server-go/db/schema.sql` agar sinkron dengan sqlc.
-
-- [ ] **Step 4: Jalankan migrasi pada database Docker**
-  Jalankan perintah SQL ke container database PostgreSQL:
-  ```bash
-  docker exec open-clickup-db-1 psql -U clickuppp -d clickuppp -f /dev/stdin < server-go/db/migrations/000002_create_docs.up.sql
-  ```
-  Verifikasi: Kedua tabel berhasil dibuat.
-
-- [ ] **Step 5: Commit migrasi**
-  ```bash
-  git add server-go/db/migrations server-go/db/schema.sql
-  git commit -m "feat(db): add migrations and schema for Doc and DocPage"
-  ```
+- [x] **Step 1: Buat migration up SQL**
+- [x] **Step 2: Buat migration down SQL**
+- [x] **Step 3: Update `server-go/db/schema.sql`**
+- [x] **Step 4: Jalankan migrasi pada database Docker**
+- [x] **Step 5: Commit migrasi**
 
 ---
 
@@ -105,24 +48,10 @@
 **Interfaces:**
 - Produces: Query methods `CreateDoc`, `GetDoc`, `ListDocsByWorkspace`, `CreateDocPage`, `GetDocPagesByDoc`, `GetDocPage`, `UpdateDocPage`, `DeleteDoc`, `DeleteDocPage`
 
-- [ ] **Step 1: Tulis query SQL di `server-go/db/queries/docs.sql`**
-  Query lengkap CRUD Doc dan DocPage.
-
-- [ ] **Step 2: Generate kode Go sqlc**
-  Jalankan:
-  ```bash
-  cd server-go && sqlc generate
-  ```
-  (Atau buat file Go model dan querier yang kompatibel di `internal/db/` jika binary sqlc tidak terinstall lokal).
-
-- [ ] **Step 3: Verifikasi build backend Go**
-  Jalankan: `PATH=$PATH:/home/gli-it/go/bin go build ./...` di direktori `server-go/`.
-
-- [ ] **Step 4: Commit sqlc queries**
-  ```bash
-  git add server-go/db/queries/docs.sql server-go/internal/db/
-  git commit -m "feat(db): add sqlc queries and generated code for docs"
-  ```
+- [x] **Step 1: Tulis query SQL di `server-go/db/queries/docs.sql`**
+- [x] **Step 2: Generate kode Go sqlc**
+- [x] **Step 3: Verifikasi build backend Go**
+- [x] **Step 4: Commit sqlc queries**
 
 ---
 
@@ -146,23 +75,11 @@
   - `PATCH /api/docs/:docId/pages/:pageId`
   - `DELETE /api/docs/:docId/pages/:pageId`
 
-- [ ] **Step 1: Tambahkan DTO request/response di `server-go/internal/dto/dto.go`**
-  Definisikan struct `CreateDocRequest`, `UpdateDocRequest`, `CreateDocPageRequest`, `UpdateDocPageRequest`, `DocDetailResponse`.
-
-- [ ] **Step 2: Buat handler `server-go/internal/handlers/docs.go`**
-  Implementasikan logika handler Fiber untuk semua endpoint Doc dan DocPage. Saat membuat Doc baru, otomatis buatkan 1 `DocPage` awal (root page).
-
-- [ ] **Step 3: Daftarkan route di `server-go/cmd/server/main.go`**
-  Tambahkan group route `/api/docs` dengan middleware `auth.RequireUser(q)` dan `auth.RequireRole(q, db.MemberRoleMEMBER)`.
-
-- [ ] **Step 4: Test endpoint backend menggunakan curl**
-  Jalankan pengujian curl untuk memastikan login, create doc, list docs, dan get doc page mengembalikan HTTP 200 OK.
-
-- [ ] **Step 5: Commit handler backend**
-  ```bash
-  git add server-go/internal/dto/dto.go server-go/internal/handlers/docs.go server-go/cmd/server/main.go
-  git commit -m "feat(server): implement docs and doc pages api endpoints"
-  ```
+- [x] **Step 1: Tambahkan DTO request/response di `server-go/internal/dto/dto.go`**
+- [x] **Step 2: Buat handler `server-go/internal/handlers/docs.go`**
+- [x] **Step 3: Daftarkan route di `server-go/cmd/server/main.go`**
+- [x] **Step 4: Test endpoint backend menggunakan curl**
+- [x] **Step 5: Commit handler backend**
 
 ---
 
@@ -174,20 +91,9 @@
 **Interfaces:**
 - Produces: Data demo dokumen contoh ("Product Roadmap & Architecture", "Engineering Guidelines & Code Conventions") lengkap dengan konten Markdown yang kaya dan sub-pages.
 
-- [ ] **Step 1: Tambahkan fungsi seeder dokumen di `server-go/cmd/seed/main.go`**
-  Insert contoh Doc di tingkat Workspace dan Space Engineering, lengkap dengan beberapa DocPage bertingkat dan konten Markdown yang menarik.
-
-- [ ] **Step 2: Jalankan seeder**
-  ```bash
-  cd server-go && PATH=$PATH:/home/gli-it/go/bin go run ./cmd/seed
-  ```
-  Verifikasi output: `Seeded demo docs successfully`.
-
-- [ ] **Step 3: Commit seeder**
-  ```bash
-  git add server-go/cmd/seed/main.go
-  git commit -m "feat(seed): add demo documents and pages to database seeder"
-  ```
+- [x] **Step 1: Tambahkan fungsi seeder dokumen di `server-go/cmd/seed/main.go`**
+- [x] **Step 2: Jalankan seeder**
+- [x] **Step 3: Commit seeder**
 
 ---
 
@@ -200,20 +106,10 @@
 **Interfaces:**
 - Produces: Types `DocItem`, `DocPageItem`, `DocDetail` dan hooks `useDocs()`, `useDoc(docId)`, `useDocPage(docId, pageId)`, `useCreateDoc()`, `useUpdateDoc()`, `useDeleteDoc()`, `useCreateDocPage()`, `useUpdateDocPage()`, `useDeleteDocPage()`.
 
-- [ ] **Step 1: Tambahkan Type definitions di `lib/queries.ts`**
-  Definisikan interface `DocItem`, `DocPageItem`, `DocDetailResponse`.
-
-- [ ] **Step 2: Tambahkan TanStack Query Hooks di `lib/hooks.ts`**
-  Implementasikan hook query dan mutation dengan optimasi invalidate query cache.
-
-- [ ] **Step 3: Verifikasi typecheck**
-  Jalankan: `npx tsc --noEmit` untuk memastikan tidak ada error typing.
-
-- [ ] **Step 4: Commit hooks frontend**
-  ```bash
-  git add lib/queries.ts lib/hooks.ts
-  git commit -m "feat(client): add types and hooks for docs management"
-  ```
+- [x] **Step 1: Tambahkan Type definitions di `lib/queries.ts`**
+- [x] **Step 2: Tambahkan TanStack Query Hooks di `lib/hooks.ts`**
+- [x] **Step 3: Verifikasi typecheck**
+- [x] **Step 4: Commit hooks frontend**
 
 ---
 
@@ -227,23 +123,10 @@
 - Consumes: `@tiptap/react`, `@tiptap/starter-kit`, `@tiptap/suggestion`, Lucide icons
 - Produces: `<DocEditor />` dengan support markdown shortcuts (`# `, `**`, `- `, ```), slash command menu (`/`), dan toggle Visual / Raw Markdown editor.
 
-- [ ] **Step 1: Buat komponen Slash Command Menu di `components/doc/slash-command.tsx`**
-  Menu melayang saat pengguna mengetik `/` untuk memilih blok: H1, H2, H3, Bullet list, Numbered list, Code block, Quote, Divider.
-
-- [ ] **Step 2: Buat komponen `DocEditor` di `components/doc/doc-editor.tsx`**
-  Editor berbasis TipTap yang menyimpan dan membaca markdown.
-  Sediakan mode toggle:
-  - Mode Visual (WYSIWYG)
-  - Mode Raw Markdown (textarea dengan monospace font yang bisa diedit langsung).
-
-- [ ] **Step 3: Uji fungsi konversi Markdown <-> HTML TipTap**
-  Pastikan pergantian mode tidak menghilangkan konten atau formatting.
-
-- [ ] **Step 4: Commit komponen editor**
-  ```bash
-  git add components/doc/
-  git commit -m "feat(client): implement notion-style doc editor with markdown shortcuts and dual mode"
-  ```
+- [x] **Step 1: Buat komponen Slash Command Menu di `components/doc/slash-command.tsx`**
+- [x] **Step 2: Buat komponen `DocEditor` di `components/doc/doc-editor.tsx`**
+- [x] **Step 3: Uji fungsi konversi Markdown <-> HTML TipTap**
+- [x] **Step 4: Commit komponen editor**
 
 ---
 
@@ -259,30 +142,12 @@
 - Consumes: `<DocEditor />`, `useDocs()`, `useDoc()`
 - Produces: Rute `/docs`, `/docs/:docId`, `/docs/:docId/p/:pageId`, dan tautan Docs di sidebar.
 
-- [ ] **Step 1: Tambahkan item menu "Docs" di Sidebar (`components/sidebar/sidebar.tsx`)**
-  Tampilkan icon `FileText` di bawah menu Home dengan badge jumlah doc, mengarahkan ke `/docs`.
-
-- [ ] **Step 2: Buat halaman Docs Hub (`src/pages/docs-hub.tsx`)**
-  Halaman dashboard semua dokumen: kartu Pinned Docs, Recent Docs, All Docs, filter pencarian, dan tombol "+ New Doc".
-
-- [ ] **Step 3: Buat halaman Doc View (`src/pages/doc-view.tsx`)**
-  Layout dokumen lengkap dengan:
-  - Sidebar kiri: Pohon daftar halaman (`DocPage` tree), tombol tambah sub-page, tombol delete/rename.
-  - Header: Breadcrumb judul, status simpan ("Saved" / "Saving..."), switch mode Visual / Markdown.
-  - Body: Judul halaman yang bisa diedit, icon picker, dan komponen `<DocEditor />`.
-  - Auto-save debounced (otomatis menyimpan perubahan setelah berhenti mengetik 800ms).
-
-- [ ] **Step 4: Daftarkan rute di `src/App.tsx`**
-  Tambahkan rute `/docs`, `/docs/:docId`, dan `/docs/:docId/p/:pageId` di dalam `<AppShell>`.
-
-- [ ] **Step 5: Verifikasi tampilan di browser**
-  Buka `http://localhost:3000/docs`, coba navigasi dan edit dokumen.
-
-- [ ] **Step 6: Commit halaman UI Docs**
-  ```bash
-  git add src/pages/docs-hub.tsx src/pages/doc-view.tsx components/sidebar/sidebar.tsx src/App.tsx
-  git commit -m "feat(client): implement docs hub, tree navigation, and app routing"
-  ```
+- [x] **Step 1: Tambahkan item menu "Docs" di Sidebar (`components/sidebar/sidebar.tsx`)**
+- [x] **Step 2: Buat halaman Docs Hub (`src/pages/docs-hub.tsx`)**
+- [x] **Step 3: Buat halaman Doc View (`src/pages/doc-view.tsx`)**
+- [x] **Step 4: Daftarkan rute di `src/App.tsx`**
+- [x] **Step 5: Verifikasi tampilan di browser**
+- [x] **Step 6: Commit halaman UI Docs**
 
 ---
 
@@ -293,26 +158,8 @@
 - Run: `pnpm test`
 - Run: `cd server-go && PATH=$PATH:/home/gli-it/go/bin go test ./...`
 
-- [ ] **Step 1: Tulis unit test untuk parser/serializer markdown**
-  Uji edge case konversi markdown ke format yang dikonsumsi editor.
-
-- [ ] **Step 2: Jalankan test suite vitest**
-  Jalankan: `pnpm test`
-  Harus 100% PASS.
-
-- [ ] **Step 3: Jalankan test suite Go backend**
-  Jalankan: `cd server-go && PATH=$PATH:/home/gli-it/go/bin go test ./...`
-  Harus 100% PASS.
-
-- [ ] **Step 4: Verifikasi manual di browser**
-  - Buat doc baru.
-  - Buat sub-page.
-  - Ketik dengan markdown shortcuts (`# Heading`, `- List`, dll.).
-  - Beralih ke mode Raw Markdown, ubah teks, kembali ke visual.
-  - Refresh halaman untuk memastikan perubahan tersimpan di database PostgreSQL.
-
-- [ ] **Step 5: Final commit**
-  ```bash
-  git add .
-  git commit -m "feat(docs): complete wysiwyg + markdown docs subsystem with sub-pages and seeder"
-  ```
+- [x] **Step 1: Tulis unit test untuk parser/serializer markdown**
+- [x] **Step 2: Jalankan test suite vitest**
+- [x] **Step 3: Jalankan test suite Go backend**
+- [x] **Step 4: Verifikasi manual di browser**
+- [x] **Step 5: Final commit**

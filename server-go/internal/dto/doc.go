@@ -52,9 +52,13 @@ type UpdateDocRequest struct {
 }
 
 type CreateDocPageRequest struct {
-	Title        string   `json:"title"`
-	ParentPageID *string  `json:"parentPageId"`
-	Position     *float64 `json:"position"`
+	Title           string   `json:"title"`
+	ParentPageID    *string  `json:"parentPageId"`
+	Position        *float64 `json:"position"`
+	ContentMarkdown *string  `json:"contentMarkdown"`
+	ContentHTML     *string  `json:"contentHtml"`
+	Icon            *string  `json:"icon"`
+	CoverImage      *string  `json:"coverImage"`
 }
 
 type UpdateDocPageRequest struct {
