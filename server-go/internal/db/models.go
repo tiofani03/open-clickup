@@ -318,6 +318,34 @@ type CustomFieldValue struct {
 	Value         []byte `json:"value"`
 }
 
+type Doc struct {
+	ID          string             `json:"id"`
+	WorkspaceID string             `json:"workspace_id"`
+	SpaceID     pgtype.Text        `json:"space_id"`
+	FolderID    pgtype.Text        `json:"folder_id"`
+	ListID      pgtype.Text        `json:"list_id"`
+	TaskID      pgtype.Text        `json:"task_id"`
+	Title       string             `json:"title"`
+	CreatedByID string             `json:"created_by_id"`
+	IsPinned    bool               `json:"is_pinned"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type DocPage struct {
+	ID              string             `json:"id"`
+	DocID           string             `json:"doc_id"`
+	ParentPageID    pgtype.Text        `json:"parent_page_id"`
+	Title           string             `json:"title"`
+	ContentMarkdown string             `json:"content_markdown"`
+	ContentHtml     string             `json:"content_html"`
+	Icon            pgtype.Text        `json:"icon"`
+	CoverImage      pgtype.Text        `json:"cover_image"`
+	Position        float64            `json:"position"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Favorite struct {
 	ID     string `json:"id"`
 	UserId string `json:"userId"`
