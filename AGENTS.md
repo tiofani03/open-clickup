@@ -11,18 +11,16 @@ deeper docs before making changes.
 
 An open-source, self-hostable **ClickUp clone for project/task management** —
 feature parity for *management* (no AI features), with a UX intended to match
-ClickUp closely. Next.js 16 + React 19 + Prisma 7 + Postgres. MIT-licensed.
+ClickUp closely. Vite + React 19 + Go Fiber + sqlc + Postgres. MIT-licensed.
 
 → Product vision, scope, and non-negotiables: **[docs/vision.md](docs/vision.md)**
 
-## ⚠️ This is NOT the Next.js you know
+## Runtime split
 
-<!-- BEGIN:nextjs-agent-rules -->
-This Next.js version has breaking changes — APIs, conventions, and file structure
-may differ from your training data. **Read the relevant guide in
-`node_modules/next/dist/docs/` before writing any code.** Heed deprecation
-notices (e.g. the `middleware`→`proxy` rename already done in this repo).
-<!-- END:nextjs-agent-rules -->
+The browser app is a Vite SPA on `:3000`; `/api` is proxied to the Go Fiber
+server on `:8080`. Some components still import `next/link` and
+`next/navigation`, but those names resolve to compatibility adapters under
+`src/lib/compat/`—Next.js is not a runtime dependency.
 
 ## Prime directives (the short version)
 

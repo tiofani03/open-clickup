@@ -18,6 +18,7 @@ import {
   Trash2,
   Reply,
   Check,
+  Target,
 } from "lucide-react";
 import { apiGet, apiSend } from "@/lib/api";
 import type { TaskDetail, TaskPatch } from "@/lib/queries";
@@ -39,6 +40,7 @@ import { TimeTracking } from "@/components/task/time-tracking";
 import { Dependencies } from "@/components/task/dependencies";
 import { useWorkspace } from "@/components/workspace-context";
 import { format } from "date-fns";
+import { TaskSprintControls } from "@/components/sprint/task-sprint-controls";
 
 export function TaskModal({
   taskId,
@@ -242,6 +244,17 @@ export function TaskModal({
                     />
                   </DetailRow>
 
+                  <DetailRow icon={<Target className="h-4 w-4" />} label="Sprint points">
+                    <input
+                      type="number"
+                      min={0}
+                      value={task.sprintPoints ?? ""}
+                      onChange={(event) => update.mutate({ sprintPoints: event.target.value === "" ? null : Number(event.target.value) })}
+                      className="w-20 rounded border border-cu-border bg-cu-panel px-2 py-1 text-sm outline-none focus:border-cu-purple"
+                      placeholder="—"
+                    />
+                  </DetailRow>
+
                   <DetailRow icon={<Repeat className="h-4 w-4" />} label="Recurring">
                     <RecurrenceControl
                       value={task.recurrence}
@@ -265,6 +278,8 @@ export function TaskModal({
                       label="Watchers"
                     />
                   </DetailRow>
+
+                  <TaskSprintControls task={task} />
 
                   {/* custom fields */}
                   {(task.list?.customFields ?? []).length > 0 && (

@@ -1,7 +1,7 @@
 "use client";
 
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { X, Trash2, Flag } from "lucide-react";
+import { X, Trash2, Flag, Target, Hash } from "lucide-react";
 import type { StatusModel } from "@/lib/queries";
 import { Priority } from "@/lib/enums";
 import { PRIORITY_ORDER, PRIORITY_CONFIG } from "@/lib/constants";
@@ -9,6 +9,7 @@ import { PriorityFlag } from "@/components/ui/primitives";
 import { StatusCircle } from "@/components/menus/status-control";
 import { Avatar } from "@/components/ui/avatar";
 import { useWorkspace } from "@/components/workspace-context";
+import { cn } from "@/lib/utils";
 
 export function BulkBar({
   count,
@@ -16,6 +17,8 @@ export function BulkBar({
   onSetStatus,
   onSetPriority,
   onSetAssignees,
+  onSetPoints,
+  onAddSprint,
   onDelete,
   onClear,
 }: {
@@ -24,11 +27,14 @@ export function BulkBar({
   onSetStatus: (statusId: string) => void;
   onSetPriority: (p: Priority | null) => void;
   onSetAssignees: (ids: string[]) => void;
+  onSetPoints: (points: number | null) => void;
+  onAddSprint: (sprintId: string) => void;
   onDelete: () => void;
   onClear: () => void;
 }) {
   const { workspace } = useWorkspace();
   const members = workspace.members.map((m) => m.user);
+  const sprintFolders = workspace.spaces.flatMap((space) => space.folders).filter((folder) => folder.kind === "SPRINT");
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center">
@@ -66,6 +72,16 @@ export function BulkBar({
           <AssignPicker members={members} onApply={onSetAssignees} />
         </BarMenu>
 
+        <BarMenu label="Points" icon={<Hash className="h-4 w-4" />}>
+          {[0, 1, 2, 3, 5, 8, 13, 21].map((points) => <Item key={points} onSelect={() => onSetPoints(points)}>{points} points</Item>)}
+          <div className="my-1 h-px bg-cu-border" />
+          <Item onSelect={() => onSetPoints(null)}><X className="h-3.5 w-3.5" /> Clear</Item>
+        </BarMenu>
+
+        {sprintFolders.length > 0 && <BarMenu label="Sprint" icon={<Target className="h-4 w-4" />}>
+          {sprintFolders.map((folder) => <div key={folder.id}><div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-cu-text-tertiary">{folder.name}</div>{folder.sprints.filter((sprint) => sprint.status === "PLANNED" || sprint.status === "ACTIVE").map((sprint) => <Item key={sprint.id} onSelect={() => onAddSprint(sprint.id)}><span className={cn("h-2 w-2 rounded-full", sprint.status === "ACTIVE" ? "bg-cu-purple" : "bg-amber-500")} />{sprint.name}</Item>)}</div>)}
+        </BarMenu>}
+
         <button
           onClick={onDelete}
           className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] hover:bg-white/10"
@@ -82,12 +98,12 @@ export function BulkBar({
   );
 }
 
-function BarMenu({ label, children }: { label: string; children: React.ReactNode }) {
+function BarMenu({ label, icon, children }: { label: string; icon?: React.ReactNode; children: React.ReactNode }) {
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] hover:bg-white/10">
-          {label === "Priority" ? <Flag className="h-4 w-4" /> : null}
+          {label === "Priority" ? <Flag className="h-4 w-4" /> : icon}
           {label}
         </button>
       </DropdownMenu.Trigger>

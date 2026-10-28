@@ -17,6 +17,7 @@ COPY server-go/go.mod server-go/go.sum ./
 RUN go mod download
 COPY server-go/ .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/goserver ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/migrate ./cmd/migrate
 
 # --- Stage 3: Minimal Production Runner ---
 FROM alpine:3.21 AS runner
@@ -28,6 +29,8 @@ ENV HOSTNAME=0.0.0.0
 
 COPY --from=frontend-builder /app/dist ./dist
 COPY --from=backend-builder /app/goserver ./goserver
+COPY --from=backend-builder /app/migrate ./migrate
+COPY --from=backend-builder /app/db/migrations ./migrations
 
 EXPOSE 3000
-CMD ["/app/goserver"]
+CMD ["sh", "-c", "/app/migrate && exec /app/goserver"]

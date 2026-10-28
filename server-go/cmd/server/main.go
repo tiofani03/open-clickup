@@ -95,6 +95,28 @@ func main() {
 	lists.Delete("/:listId", auth.RequireRole(q, db.MemberRoleMEMBER), hierH.DeleteList)
 	lists.Post("/:listId/favorite", hierH.ToggleFavorite)
 
+	// Sprint folders, sprint lifecycle, and task membership
+	sprintH := handlers.NewSprintsHandler(pool, q)
+	sprintFolders := api.Group("/sprint-folders", auth.RequireUser(q))
+	sprintFolders.Post("/", sprintH.CreateSprintFolder)
+	sprintFolders.Get("/:folderId", sprintH.GetSprintFolder)
+	sprintFolders.Patch("/:folderId", sprintH.UpdateSprintFolder)
+	sprintFolders.Delete("/:folderId", sprintH.DeleteSprintFolder)
+	sprintFolders.Post("/:folderId/sprints", sprintH.CreateSprint)
+	sprintFolders.Get("/:folderId/backlog", sprintH.GetBacklog)
+	sprintFolders.Get("/:folderId/report", sprintH.GetSprintFolderReport)
+
+	sprints := api.Group("/sprints", auth.RequireUser(q))
+	sprints.Get("/:sprintId", sprintH.GetSprint)
+	sprints.Get("/:sprintId/report", sprintH.GetSprintReport)
+	sprints.Patch("/:sprintId", sprintH.UpdateSprint)
+	sprints.Delete("/:sprintId", sprintH.DeleteSprint)
+	sprints.Post("/:sprintId/tasks", sprintH.AddTasks)
+	sprints.Delete("/:sprintId/tasks/:taskId", sprintH.RemoveTask)
+	sprints.Post("/:sprintId/start", sprintH.StartSprint)
+	sprints.Post("/:sprintId/complete", sprintH.CompleteSprint)
+	sprints.Post("/:sprintId/cancel", sprintH.CancelSprint)
+
 	// Statuses & Views
 	statusH := handlers.NewStatusesHandler(q)
 	api.Patch("/statuses/:statusId", auth.RequireRole(q, db.MemberRoleMEMBER), statusH.UpdateStatus)
@@ -124,6 +146,7 @@ func main() {
 	tasks.Get("/:taskId", taskH.GetTask)
 	tasks.Patch("/:taskId", auth.RequireRole(q, db.MemberRoleMEMBER), taskH.UpdateTask)
 	tasks.Delete("/:taskId", auth.RequireRole(q, db.MemberRoleMEMBER), taskH.DeleteTask)
+	tasks.Get("/:taskId/sprints", sprintH.GetTaskSprintHistory)
 
 	// Comments & Reactions
 	commentH := handlers.NewCommentsHandler(pool, q)

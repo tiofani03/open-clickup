@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { ChevronRight, ChevronDown, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ListData, TaskWithRelations, StatusModel, CustomFieldWithOptions } from "@/lib/queries";
-import { useUpdateTask, useCreateTask, useBulk } from "@/lib/hooks";
+import { useUpdateTask, useCreateTask, useBulk, useBulkSprint } from "@/lib/hooks";
 import { useWorkspace } from "@/components/workspace-context";
 import { groupTasks, type TaskGroup } from "@/lib/grouping";
 import type { GroupBy } from "@/lib/view-state";
@@ -33,6 +33,7 @@ export function TableView({
   const members = useMemo(() => workspace.members.map((m) => m.user), [workspace.members]);
   const update = useUpdateTask(list.id);
   const bulk = useBulk(list.id);
+  const bulkSprint = useBulkSprint(list.id);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const toggleSelect = (id: string) =>
     setSelected((prev) => {
@@ -98,6 +99,8 @@ export function TableView({
           onSetStatus={(statusId) => bulk.mutate({ ids: [...selected], patch: { statusId } })}
           onSetPriority={(priority) => bulk.mutate({ ids: [...selected], patch: { priority } })}
           onSetAssignees={(assigneeIds) => bulk.mutate({ ids: [...selected], patch: { assigneeIds } })}
+          onSetPoints={(sprintPoints) => bulk.mutate({ ids: [...selected], patch: { sprintPoints } })}
+          onAddSprint={(sprintId) => bulkSprint.mutate({ sprintId, taskIds: [...selected] })}
           onDelete={() => {
             bulk.mutate({ ids: [...selected], delete: true });
             clearSelect();

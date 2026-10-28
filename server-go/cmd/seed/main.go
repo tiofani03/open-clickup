@@ -39,12 +39,13 @@ func main() {
 
 	fmt.Println("🧹 Clearing database...")
 	clearTables := []string{
+		"\"SprintEvent\"", "\"SprintTask\"", "\"Sprint\"", "\"SprintFolderSourceList\"", "\"SprintFolderSettings\"",
+		"\"DocComment\"", "\"DocPage\"", "\"Doc\"",
 		"\"CommentReaction\"", "\"Comment\"", "\"Activity\"", "\"ChecklistItem\"",
 		"\"Checklist\"", "\"CustomFieldValue\"", "\"CustomFieldOption\"", "\"CustomField\"",
 		"\"TaskAssignee\"", "\"TaskWatcher\"", "\"TaskTag\"", "\"TimeEntry\"",
 		"\"Dependency\"", "\"Task\"", "\"Tag\"", "\"Status\"", "\"View\"",
 		"\"List\"", "\"Folder\"", "\"Space\"", "\"WorkspaceMember\"",
-		"\"DocPage\"", "\"Doc\"",
 		"\"Workspace\"", "\"Session\"", "\"Favorite\"", "\"Notification\"", "\"User\"",
 	}
 
@@ -176,17 +177,35 @@ func main() {
 		VALUES ($1, $2, 'Product', '#7b68ee', '🚀', 1000)
 	`, prodSpaceID, wsID)
 
-	// Folder: Sprints
+	// Sprint Folder: Engineering Sprints
 	sprintsFolderID := cuid()
 	_, _ = pool.Exec(ctx, `
-		INSERT INTO "Folder" (id, "spaceId", name, "position")
-		VALUES ($1, $2, 'Sprints', 1000)
+		INSERT INTO "Folder" (id, "spaceId", name, kind, "position")
+		VALUES ($1, $2, 'Engineering Sprints', 'SPRINT', 1000)
 	`, sprintsFolderID, prodSpaceID)
 
-	sprint24ID, sprint24Statuses := createList(prodSpaceID, &sprintsFolderID, "Sprint 24", "#7b68ee", 1000)
-	_, _ = createList(prodSpaceID, &sprintsFolderID, "Sprint 25", "#7b68ee", 2000)
 	backlogID, backlogStatuses := createList(prodSpaceID, nil, "Backlog", "#ff7800", 1000)
 	_, _ = createList(prodSpaceID, nil, "Roadmap", "#2ecd6f", 2000)
+	_, _ = pool.Exec(ctx, `
+		INSERT INTO "SprintFolderSettings" ("folderId", "durationDays", "startDayOfWeek", "startTime", timezone, "estimationMetric", "pointScale")
+		VALUES ($1, 14, 1, '09:00', 'Asia/Jakarta', 'POINTS', ARRAY[1,2,3,5,8,13])
+	`, sprintsFolderID)
+	_, _ = pool.Exec(ctx, `
+		INSERT INTO "SprintFolderSourceList" ("sprintFolderId", "listId", position)
+		VALUES ($1, $2, 1000)
+	`, sprintsFolderID, backlogID)
+
+	now := time.Now()
+	sprint24ID := cuid()
+	sprint25ID := cuid()
+	_, _ = pool.Exec(ctx, `
+		INSERT INTO "Sprint" (id, "sprintFolderId", name, goal, status, "startsAt", "endsAt", "timezoneSnapshot", "forecastLockedAt", "startedAt", "createdById")
+		VALUES ($1, $2, 'Sprint 24', 'Ship the next product-management improvements', 'ACTIVE', $3, $4, 'Asia/Jakarta', $3, $3, $5)
+	`, sprint24ID, sprintsFolderID, now.AddDate(0, 0, -7), now.AddDate(0, 0, 7), userIDs[0])
+	_, _ = pool.Exec(ctx, `
+		INSERT INTO "Sprint" (id, "sprintFolderId", name, goal, status, "startsAt", "endsAt", "timezoneSnapshot", "createdById")
+		VALUES ($1, $2, 'Sprint 25', 'Planned follow-up work', 'PLANNED', $3, $4, 'Asia/Jakarta', $5)
+	`, sprint25ID, sprintsFolderID, now.AddDate(0, 0, 7), now.AddDate(0, 0, 21), userIDs[0])
 
 	// Space: Marketing
 	mktSpaceID := cuid()
@@ -215,23 +234,28 @@ func main() {
 		Description string
 		Priority    db.Priority
 		AssigneeIdx int
+		SprintID    string
+		Points      int
 	}{
-		{backlogID, backlogStatuses[0], "Design multi-workspace data model", "Evaluate tenant isolation and billing models", db.PriorityHIGH, 0},
-		{backlogID, backlogStatuses[1], "Vite + Go Fiber architecture migration", "Decouple frontend SPA and build ultra-fast Go backend", db.PriorityURGENT, 0},
-		{backlogID, backlogStatuses[2], "Automated E2E test coverage", "Ensure Playwright tests pass on all 5 views", db.PriorityNORMAL, 1},
-		{backlogID, backlogStatuses[3], "Initial project setup", "Project repository and initial database schema", db.PriorityLOW, 2},
-		{sprint24ID, sprint24Statuses[0], "Add custom dropdown field options", "Support color picking for select options", db.PriorityNORMAL, 3},
-		{sprint24ID, sprint24Statuses[1], "Implement task recurrence engine", "Calculate next occurrence date on completion", db.PriorityHIGH, 4},
-		{sprint24ID, sprint24Statuses[3], "Realtime SSE broadcast", "Sync changes across client tabs automatically", db.PriorityNORMAL, 0},
+		{backlogID, backlogStatuses[0], "Design multi-workspace data model", "Evaluate tenant isolation and billing models", db.PriorityHIGH, 0, "", 8},
+		{backlogID, backlogStatuses[1], "Vite + Go Fiber architecture migration", "Decouple frontend SPA and build ultra-fast Go backend", db.PriorityURGENT, 0, sprint24ID, 8},
+		{backlogID, backlogStatuses[2], "Automated E2E test coverage", "Ensure Playwright tests pass on all 5 views", db.PriorityNORMAL, 1, sprint24ID, 5},
+		{backlogID, backlogStatuses[3], "Initial project setup", "Project repository and initial database schema", db.PriorityLOW, 2, sprint24ID, 3},
+		{backlogID, backlogStatuses[0], "Add custom dropdown field options", "Support color picking for select options", db.PriorityNORMAL, 3, sprint24ID, 3},
+		{backlogID, backlogStatuses[1], "Implement task recurrence engine", "Calculate next occurrence date on completion", db.PriorityHIGH, 4, sprint24ID, 5},
+		{backlogID, backlogStatuses[3], "Realtime SSE broadcast", "Sync changes across client tabs automatically", db.PriorityNORMAL, 0, sprint24ID, 2},
 	}
 
-	now := time.Now()
 	for i, t := range sampleTasks {
 		tID := cuid()
+		var completedAt any
+		if t.StatusID == backlogStatuses[3] {
+			completedAt = now.AddDate(0, 0, -2)
+		}
 		_, err := pool.Exec(ctx, `
-			INSERT INTO "Task" (id, "listId", "statusId", name, description, priority, "position", "createdById", "createdAt", "updatedAt")
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
-		`, tID, t.ListID, t.StatusID, t.Name, t.Description, t.Priority, float64(i*1000), userIDs[t.AssigneeIdx], now)
+			INSERT INTO "Task" (id, "listId", "statusId", name, description, priority, "position", "sprintPoints", "createdById", "createdAt", "updatedAt", "completedAt")
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, $11)
+		`, tID, t.ListID, t.StatusID, t.Name, t.Description, t.Priority, float64(i*1000), t.Points, userIDs[t.AssigneeIdx], now, completedAt)
 		if err != nil {
 			log.Fatalf("Failed to create task %s: %v", t.Name, err)
 		}
@@ -247,6 +271,15 @@ func main() {
 			INSERT INTO "Activity" (id, "taskId", "userId", type, data)
 			VALUES ($1, $2, $3, 'created', '{}')
 		`, cuid(), tID, userIDs[t.AssigneeIdx])
+
+		if t.SprintID != "" {
+			_, _ = pool.Exec(ctx, `
+				INSERT INTO "SprintTask" (
+					id, "sprintId", "sprintFolderId", "taskId", position, "addedById",
+					"pointsAtAdd", "forecastPoints", "taskNameSnapshot", "homeListIdSnapshot", "homeListNameSnapshot", "addedAt"
+				) VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9, 'Backlog', $10)
+			`, cuid(), t.SprintID, sprintsFolderID, tID, float64(i*1000), userIDs[0], t.Points, t.Name, backlogID, now.AddDate(0, 0, -7))
+		}
 	}
 
 	fmt.Println("📄 Creating demo documents...")

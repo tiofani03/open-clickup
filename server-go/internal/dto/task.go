@@ -32,29 +32,31 @@ type TaskCount struct {
 }
 
 type TaskResponse struct {
-	ID                string                 `json:"id"`
-	ListID            string                 `json:"listId"`
-	StatusID          string                 `json:"statusId"`
-	ParentID          *string                `json:"parentId"`
-	Name              string                 `json:"name"`
-	Description       *string                `json:"description"`
-	Priority          *string                `json:"priority"`
-	Position          float64                `json:"position"`
-	StartDate         *string                `json:"startDate"`
-	DueDate           *string                `json:"dueDate"`
-	TimeEstimate      *int32                 `json:"timeEstimate"`
-	CreatedByID       *string                `json:"createdById"`
-	CreatedAt         string                 `json:"createdAt"`
-	UpdatedAt         string                 `json:"updatedAt"`
-	CompletedAt       *string                `json:"completedAt"`
-	Archived          bool                   `json:"archived"`
-	Recurrence        *string                `json:"recurrence"`
-	Status            StatusResponse         `json:"status"`
-	Assignees         []TaskAssigneeResponse `json:"assignees"`
-	Tags              []TaskTagResponse      `json:"tags"`
-	Subtasks          []SubtaskResponse      `json:"subtasks"`
-	CustomFieldValues []interface{}          `json:"customFieldValues"`
-	Count             TaskCount              `json:"_count"`
+	ID                string                      `json:"id"`
+	ListID            string                      `json:"listId"`
+	StatusID          string                      `json:"statusId"`
+	ParentID          *string                     `json:"parentId"`
+	Name              string                      `json:"name"`
+	Description       *string                     `json:"description"`
+	Priority          *string                     `json:"priority"`
+	Position          float64                     `json:"position"`
+	StartDate         *string                     `json:"startDate"`
+	DueDate           *string                     `json:"dueDate"`
+	TimeEstimate      *int32                      `json:"timeEstimate"`
+	SprintPoints      *int32                      `json:"sprintPoints"`
+	CreatedByID       *string                     `json:"createdById"`
+	CreatedAt         string                      `json:"createdAt"`
+	UpdatedAt         string                      `json:"updatedAt"`
+	CompletedAt       *string                     `json:"completedAt"`
+	Archived          bool                        `json:"archived"`
+	Recurrence        *string                     `json:"recurrence"`
+	Status            StatusResponse              `json:"status"`
+	Assignees         []TaskAssigneeResponse      `json:"assignees"`
+	Tags              []TaskTagResponse           `json:"tags"`
+	Subtasks          []SubtaskResponse           `json:"subtasks"`
+	CustomFieldValues []interface{}               `json:"customFieldValues"`
+	Count             TaskCount                   `json:"_count"`
+	SprintHistory     []TaskSprintHistoryResponse `json:"sprintHistory,omitempty"`
 }
 
 type ActivityUserMeta struct {
@@ -88,13 +90,14 @@ type TaskAttachmentResponse struct {
 }
 
 type TaskTimeEntryResponse struct {
-	ID        string       `json:"id"`
-	TaskID    string       `json:"taskId"`
-	UserID    string       `json:"userId"`
-	StartedAt string       `json:"startedAt"`
-	EndedAt   *string      `json:"endedAt"`
-	Duration  *int32       `json:"duration"`
-	User      UserResponse `json:"user"`
+	ID          string       `json:"id"`
+	TaskID      string       `json:"taskId"`
+	UserID      string       `json:"userId"`
+	StartedAt   string       `json:"startedAt"`
+	EndedAt     *string      `json:"endedAt"`
+	Duration    *int32       `json:"duration"`
+	Description *string      `json:"description"`
+	User        UserResponse `json:"user"`
 }
 
 type TaskDependencyBlockerItem struct {
@@ -105,10 +108,12 @@ type TaskDependencyBlockerItem struct {
 }
 
 type TaskBlockedByResponse struct {
+	ID      string                    `json:"id"`
 	Blocker TaskDependencyBlockerItem `json:"blocker"`
 }
 
 type TaskBlockingResponse struct {
+	ID      string                    `json:"id"`
 	Blocked TaskDependencyBlockerItem `json:"blocked"`
 }
 
@@ -161,4 +166,3 @@ type MyTaskResponse struct {
 	Status    MyTaskStatusResponse `json:"status"`
 	List      MyTaskListResponse   `json:"list"`
 }
-

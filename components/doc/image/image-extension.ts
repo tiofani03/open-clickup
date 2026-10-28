@@ -15,7 +15,15 @@ declare module "@tiptap/core" {
   }
 }
 
-export const ImageExtension = Node.create({
+type ImageAttributeConfig = {
+  src: { default: string };
+  alt: { default: string };
+  caption: { default: string };
+  width: { default: string };
+  alignment: { default: string };
+};
+
+const imageExtension = Node.create({
   name: "imageBlock",
   group: "block",
   atom: true,
@@ -103,3 +111,12 @@ export const ImageExtension = Node.create({
     return ReactNodeViewRenderer(ImageBlock);
   },
 });
+
+// TipTap's Node.config intentionally erases the concrete return shape of
+// addAttributes. Keep it available to tooling and tests without weakening the
+// command/runtime types above.
+export const ImageExtension = imageExtension as typeof imageExtension & {
+  config: typeof imageExtension.config & {
+    addAttributes?: () => ImageAttributeConfig;
+  };
+};

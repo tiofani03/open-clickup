@@ -9,9 +9,17 @@ export default defineConfig({
     baseURL: "http://localhost:3000",
     trace: "on-first-retry",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [{
+    name: "chromium",
+    use: {
+      ...devices["Desktop Chrome"],
+      launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+        ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH }
+        : undefined,
+    },
+  }],
   webServer: {
-    command: "pnpm dev",
+    command: "pnpm dev:all",
     url: "http://localhost:3000/login",
     reuseExistingServer: true,
     timeout: 120_000,

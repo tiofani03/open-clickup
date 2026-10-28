@@ -363,6 +363,10 @@ func (h *HierarchyHandler) GetList(c *fiber.Ctx) error {
 		if t.TimeEstimate.Valid {
 			est = &t.TimeEstimate.Int32
 		}
+		var sprintPoints *int32
+		if t.SprintPoints.Valid {
+			sprintPoints = &t.SprintPoints.Int32
+		}
 
 		taskList[i] = dto.TaskResponse{
 			ID:           t.ID,
@@ -376,6 +380,7 @@ func (h *HierarchyHandler) GetList(c *fiber.Ctx) error {
 			StartDate:    startStr,
 			DueDate:      dueStr,
 			TimeEstimate: est,
+			SprintPoints: sprintPoints,
 			CreatedByID:  textOrNil(t.CreatedById),
 			CreatedAt:    t.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
 			UpdatedAt:    t.UpdatedAt.Time.Format("2006-01-02T15:04:05.000Z"),

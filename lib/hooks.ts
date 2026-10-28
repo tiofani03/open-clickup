@@ -23,6 +23,12 @@ import type {
   UpdateDocPagePayload,
   DocCommentItem,
   CreateDocCommentPayload,
+  SprintFolderData,
+  SprintDetail,
+  SprintBacklogTask,
+  SprintSummary,
+  SprintReport,
+  SprintFolderReport,
 } from "@/lib/queries";
 
 export type Bootstrap = { currentUser: UserLite; workspace: WorkspaceTree; favorites: string[] };
@@ -52,6 +58,14 @@ export function useRealtime() {
           qc.invalidateQueries({ queryKey: ["task"] });
           qc.invalidateQueries({ queryKey: ["my-tasks"] });
         } else if (event.type === "bootstrap") {
+          qc.invalidateQueries({ queryKey: ["bootstrap"] });
+        } else if (event.type === "sprint" || event.type === "sprint-folder") {
+          qc.invalidateQueries({ queryKey: ["sprint"] });
+          qc.invalidateQueries({ queryKey: ["sprint-folder"] });
+          qc.invalidateQueries({ queryKey: ["sprint-backlog"] });
+          qc.invalidateQueries({ queryKey: ["sprint-report"] });
+          qc.invalidateQueries({ queryKey: ["sprint-folder-report"] });
+          qc.invalidateQueries({ queryKey: ["task"] });
           qc.invalidateQueries({ queryKey: ["bootstrap"] });
         } else if (event.type === "doc") {
           qc.invalidateQueries({ queryKey: ["docs"] });
@@ -173,6 +187,127 @@ export function useList(listId: string | undefined) {
     // keep the previous list visible while the next one loads (no skeleton flash)
     placeholderData: keepPreviousData,
   });
+}
+
+export function useSprintFolder(folderId: string | undefined) {
+  return useQuery({
+    queryKey: ["sprint-folder", folderId],
+    queryFn: () => apiGet<SprintFolderData>(`/api/sprint-folders/${folderId}`),
+    enabled: !!folderId,
+  });
+}
+
+export function useSprint(sprintId: string | undefined) {
+  return useQuery({
+    queryKey: ["sprint", sprintId],
+    queryFn: () => apiGet<SprintDetail>(`/api/sprints/${sprintId}`),
+    enabled: !!sprintId,
+  });
+}
+
+export function useSprintBacklog(folderId: string | undefined) {
+  return useQuery({
+    queryKey: ["sprint-backlog", folderId],
+    queryFn: () => apiGet<{ tasks: SprintBacklogTask[] }>(`/api/sprint-folders/${folderId}/backlog`),
+    enabled: !!folderId,
+  });
+}
+
+export function useSprintReport(sprintId: string | undefined) {
+  return useQuery({
+    queryKey: ["sprint-report", sprintId],
+    queryFn: () => apiGet<SprintReport>(`/api/sprints/${sprintId}/report`),
+    enabled: !!sprintId,
+  });
+}
+
+export function useSprintFolderReport(folderId: string | undefined) {
+  return useQuery({
+    queryKey: ["sprint-folder-report", folderId],
+    queryFn: () => apiGet<SprintFolderReport>(`/api/sprint-folders/${folderId}/report`),
+    enabled: !!folderId,
+  });
+}
+
+export type SprintFolderPayload = {
+  spaceId: string;
+  name: string;
+  durationDays: number;
+  startDayOfWeek: number;
+  startTime: string;
+  timezone: string;
+  estimationMetric: "POINTS" | "TIME";
+  pointScale: number[];
+  sourceListIds: string[];
+};
+
+export function useSprintMutations(folderId?: string, sprintId?: string) {
+  const qc = useQueryClient();
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ["bootstrap"] });
+    qc.invalidateQueries({ queryKey: ["sprint-folder"] });
+    qc.invalidateQueries({ queryKey: ["sprint"] });
+    qc.invalidateQueries({ queryKey: ["sprint-backlog"] });
+    qc.invalidateQueries({ queryKey: ["sprint-report"] });
+    qc.invalidateQueries({ queryKey: ["sprint-folder-report"] });
+    qc.invalidateQueries({ queryKey: ["task"] });
+    qc.invalidateQueries({ queryKey: ["list"] });
+  };
+  const createFolder = useMutation({
+    mutationFn: (payload: SprintFolderPayload) => apiSend<SprintFolderData>("/api/sprint-folders", "POST", payload),
+    onSuccess: refresh,
+  });
+  const updateFolder = useMutation({
+    mutationFn: (payload: SprintFolderPayload) => apiSend<SprintFolderData>(`/api/sprint-folders/${folderId}`, "PATCH", payload),
+    onSuccess: refresh,
+  });
+  const deleteFolder = useMutation({
+    mutationFn: () => apiSend(`/api/sprint-folders/${folderId}`, "DELETE"),
+    onSuccess: refresh,
+  });
+  const createSprint = useMutation({
+    mutationFn: (payload: { name: string; goal?: string | null; startsAt: string; endsAt: string }) =>
+      apiSend<SprintSummary>(`/api/sprint-folders/${folderId}/sprints`, "POST", payload),
+    onSuccess: refresh,
+  });
+  const updateSprint = useMutation({
+    mutationFn: (payload: Partial<{ name: string; goal: string | null; startsAt: string; endsAt: string }>) =>
+      apiSend<SprintSummary>(`/api/sprints/${sprintId}`, "PATCH", payload),
+    onSuccess: refresh,
+  });
+  const deleteSprint = useMutation({
+    mutationFn: () => apiSend(`/api/sprints/${sprintId}`, "DELETE"),
+    onSuccess: refresh,
+  });
+  const addTasks = useMutation({
+    mutationFn: (payload: { taskIds: string[]; replaceExisting?: boolean }) =>
+      apiSend<SprintDetail>(`/api/sprints/${sprintId}/tasks`, "POST", payload),
+    onSuccess: refresh,
+  });
+  const removeTask = useMutation({
+    mutationFn: (taskId: string) => apiSend(`/api/sprints/${sprintId}/tasks/${taskId}`, "DELETE"),
+    onSuccess: refresh,
+  });
+  const startSprint = useMutation({
+    mutationFn: () => apiSend<SprintSummary>(`/api/sprints/${sprintId}/start`, "POST"),
+    onSuccess: refresh,
+  });
+  const completeSprint = useMutation({
+    mutationFn: (payload: {
+      defaultAction: "CARRY_OVER" | "NO_SPRINT";
+      targetSprintId?: string;
+      overrides?: Array<{ taskId: string; action: "CARRY_OVER" | "NO_SPRINT"; targetSprintId?: string }>;
+    }) => apiSend(`/api/sprints/${sprintId}/complete`, "POST", payload),
+    onSuccess: refresh,
+  });
+  const cancelSprint = useMutation({
+    mutationFn: () => apiSend(`/api/sprints/${sprintId}/cancel`, "POST"),
+    onSuccess: refresh,
+  });
+  return {
+    createFolder, updateFolder, deleteFolder, createSprint, updateSprint, deleteSprint,
+    addTasks, removeTask, startSprint, completeSprint, cancelSprint,
+  };
 }
 
 // ----------------------------------------------------------------------------
@@ -297,11 +432,26 @@ export function useBulk(listId: string | undefined) {
   return useMutation({
     mutationFn: (input: {
       ids: string[];
-      patch?: { statusId?: string; priority?: string | null; assigneeIds?: string[] };
+      patch?: { statusId?: string; priority?: string | null; assigneeIds?: string[]; sprintPoints?: number | null };
       delete?: boolean;
     }) => apiSend("/api/tasks/bulk", "POST", input),
     onSettled: () => {
       if (listId) qc.invalidateQueries({ queryKey: ["list", listId] });
+    },
+  });
+}
+
+export function useBulkSprint(listId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sprintId, taskIds }: { sprintId: string; taskIds: string[] }) =>
+      apiSend(`/api/sprints/${sprintId}/tasks`, "POST", { taskIds, replaceExisting: true }),
+    onSettled: () => {
+      if (listId) qc.invalidateQueries({ queryKey: ["list", listId] });
+      qc.invalidateQueries({ queryKey: ["task"] });
+      qc.invalidateQueries({ queryKey: ["sprint"] });
+      qc.invalidateQueries({ queryKey: ["sprint-folder"] });
+      qc.invalidateQueries({ queryKey: ["sprint-backlog"] });
     },
   });
 }
@@ -637,4 +787,3 @@ export function useDeleteDocComment(docId?: string, pageId?: string) {
     },
   });
 }
-
