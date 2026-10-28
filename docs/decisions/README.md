@@ -33,3 +33,4 @@ that's an ADR.
 | [0005](0005-render-cap-over-virtualization.md) | Render caps instead of list virtualization | Accepted |
 | [0006](0006-rbac-single-workspace.md) | Single-workspace RBAC via `requireRole` | Accepted |
 | [0007](0007-no-ai-features.md) | No AI features | Accepted |
+| [0008](0008-sprint-membership-ledger.md) | Sprint membership ledger and immutable snapshots | Accepted |

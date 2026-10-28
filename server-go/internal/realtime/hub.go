@@ -5,8 +5,10 @@ import (
 )
 
 type Event struct {
-	Type   string `json:"type"`
-	ListID string `json:"listId,omitempty"`
+	Type           string `json:"type"`
+	ListID         string `json:"listId,omitempty"`
+	SprintID       string `json:"sprintId,omitempty"`
+	SprintFolderID string `json:"sprintFolderId,omitempty"`
 }
 
 type Hub struct {

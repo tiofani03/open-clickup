@@ -8,7 +8,8 @@ Hierarchy, five views, custom fields, real-time collaboration and dark mode — 
 
 [![CI](https://github.com/goshops-com/open-clickup/actions/workflows/ci.yml/badge.svg)](https://github.com/goshops-com/open-clickup/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-7b68ee.svg)](LICENSE)
-![Next.js](https://img.shields.io/badge/Next.js-16-000000.svg)
+![Vite](https://img.shields.io/badge/Vite-8-646cff.svg)
+![Go](https://img.shields.io/badge/Go-1.24-00add8.svg)
 ![React](https://img.shields.io/badge/React-19-149eca.svg)
 ![Postgres](https://img.shields.io/badge/Postgres-16-336791.svg)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-2ecd6f.svg)](CONTRIBUTING.md)
@@ -29,6 +30,8 @@ Hierarchy, five views, custom fields, real-time collaboration and dark mode — 
 ## ✨ Features
 
 **Hierarchy** — Workspaces → Spaces → Folders → Lists → Tasks → Subtasks, with inline create / rename / delete.
+
+**Sprints** — dedicated Sprint Folders with source Lists, cadence/timezone and point-scale settings; planned, active, completed, and cancelled lifecycle states; task planning without moving tasks out of their home List; Sprint Points, bulk assignment, immutable forecast/final snapshots, per-task Sprint history, carry-over to a planned Sprint, burndown/burnup, scope-change history, and cross-Sprint velocity.
 
 **5 views** (per list, each with its own saved configuration):
 - **List** — grouped, inline-editable, drag-to-reorder, custom-field columns
@@ -61,10 +64,11 @@ Hierarchy, five views, custom fields, real-time collaboration and dark mode — 
 
 | Layer | Choice |
 |---|---|
-| Framework | [Next.js 16](https://nextjs.org) (App Router, Turbopack) · React 19 |
+| Frontend | Vite 8 · React 19 · React Router |
+| API | Go 1.24 · Fiber |
 | Language | TypeScript |
 | Styling | Tailwind CSS 4 |
-| Database | PostgreSQL + [Prisma 7](https://www.prisma.io) (pg driver adapter) |
+| Database | PostgreSQL + pgx/sqlc |
 | Data fetching | TanStack Query (optimistic updates) |
 | Realtime | Server-Sent Events |
 | Drag & drop | dnd-kit |
@@ -76,7 +80,7 @@ Hierarchy, five views, custom fields, real-time collaboration and dark mode — 
 
 ## 🚀 Getting started
 
-**Prerequisites:** Node 20+, pnpm, Docker (for Postgres).
+**Prerequisites:** Node 20+, pnpm, Go 1.24+, and Docker (for Postgres).
 
 ```bash
 # 1. Install dependencies
@@ -87,11 +91,11 @@ docker compose up -d
 
 # 3. Configure env, run migrations, seed demo data
 cp .env.example .env
-pnpm prisma migrate dev
-pnpm db:seed
+(cd server-go && go run ./cmd/migrate)
+(cd server-go && go run ./cmd/seed)
 
-# 4. Run the dev server
-pnpm dev
+# 4. Run the frontend and API
+pnpm dev:all
 ```
 
 Open **http://localhost:3000** and log in with the seeded account (or create your own):
@@ -109,17 +113,18 @@ password: password
 docker compose -f docker-compose.prod.yml up --build
 # → http://localhost:3000  (migrations run automatically on boot)
 
-# optional: load sample data
-docker compose -f docker-compose.prod.yml exec app pnpm db:seed
+# optional: load sample data from a development checkout before deployment
+(cd server-go && go run ./cmd/seed)
 ```
 
-**Or run the Node server directly:**
+**Or run the services directly:**
 
 ```bash
-pnpm build && pnpm start
+pnpm build
+(cd server-go && NODE_ENV=production PORT=3000 go run ./cmd/server)
 ```
 
-Set `DATABASE_URL` to your Postgres instance and run `pnpm prisma migrate deploy` on deploy. The app runs anywhere Node 20+ runs (a VM, a container, or any Node host); point it at a managed or self-run Postgres. Real-time uses in-process pub/sub — for multiple instances behind a load balancer, swap it for Redis pub/sub (see `lib/events.ts`).
+Set `DATABASE_URL` to your Postgres instance and run `(cd server-go && go run ./cmd/migrate)` on deploy. The app runs on any host with the compiled Go binary and the built `dist/` directory. Real-time uses in-process pub/sub, so multi-instance deployments need a shared pub/sub adapter.
 
 A `GET /api/health` endpoint returns `200` when the database is reachable (`503` otherwise) for load-balancer and uptime checks; the Docker app container uses it as its healthcheck.
 
@@ -129,11 +134,11 @@ A `GET /api/health` endpoint returns `200` when the database is reachable (`503`
 
 | Script | Description |
 |---|---|
-| `pnpm dev` | Start the dev server (Turbopack) |
-| `pnpm build` / `pnpm start` | Production build / serve |
-| `pnpm db:seed` | Seed sample workspace, users, spaces, tasks |
-| `pnpm db:reset` | Reset the database and re-seed |
-| `pnpm db:studio` | Open Prisma Studio |
+| `pnpm dev` | Start the Vite frontend only |
+| `pnpm dev:all` | Start Vite and the Go API together |
+| `pnpm build` | Build the production frontend |
+| `(cd server-go && go run ./cmd/seed)` | Reset and seed demo data |
+| `(cd server-go && go test ./...)` | Run backend tests |
 | `pnpm lint` | Lint |
 
 ---
@@ -141,10 +146,9 @@ A `GET /api/health` endpoint returns `200` when the database is reachable (`503`
 ## 🗂️ Project structure
 
 ```
-app/
-  (app)/            # authenticated app shell + routes (list pages)
-  login/            # login / signup page
-  api/              # REST route handlers (Zod-validated) + SSE stream
+src/
+  App.tsx           # React Router route table
+  pages/            # application route components
 components/
   views/            # list · board · calendar · gantt · table + filters
   menus/            # status · priority · assignee · date · tag controls
@@ -152,15 +156,17 @@ components/
   sidebar/          # workspace navigation tree
   ui/               # avatars, rich editor, primitives, theme toggle
 lib/
-  db.ts             # Prisma client (pg adapter)
-  auth.ts           # sessions + scrypt passwords
-  events.ts         # realtime pub/sub
   queries.ts        # shared include shapes + payload types
+  hooks.ts          # TanStack Query API hooks
   grouping.ts       # group-by logic
   view-state.ts     # filters / sort / group-by
-prisma/
-  schema.prisma     # data model
-  seed.ts           # demo data
+server-go/
+  cmd/server/       # Fiber server and route wiring
+  cmd/seed/         # demo seed
+  db/migrations/    # SQL migrations
+  db/queries/       # sqlc query sources
+  internal/service/ # transactional business rules
+  internal/handlers/# REST handlers + SSE
 ```
 
 ---

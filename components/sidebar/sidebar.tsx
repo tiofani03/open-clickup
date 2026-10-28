@@ -23,17 +23,20 @@ import {
   FolderPlus,
   LogOut,
   Star,
+  FileText,
+  Target,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { apiSend } from "@/lib/api";
 import { useWorkspace } from "@/components/workspace-context";
-import { useHierarchy } from "@/lib/hooks";
+import { useHierarchy, useDocs } from "@/lib/hooks";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { InboxButton } from "@/components/sidebar/inbox";
 import { ProfileDialog } from "@/components/profile-dialog";
 import type { SpaceNode, FolderNode, ListNode } from "@/lib/queries";
 import { Avatar } from "@/components/ui/avatar";
+import { SprintFolderDialog } from "@/components/sprint/sprint-folder-dialog";
 
 export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
   const { workspace, favorites } = useWorkspace();
@@ -41,6 +44,7 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
   const [creatingSpace, setCreatingSpace] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const { data: docs } = useDocs();
 
   const favLists = workspace.spaces
     .flatMap((s) => [...s.lists, ...s.folders.flatMap((f) => f.lists)])
@@ -91,6 +95,13 @@ export function Sidebar({ onCollapse }: { onCollapse?: () => void }) {
         />
         <InboxButton />
         <NavItem icon={<LayoutGrid className="h-4 w-4" />} label="Dashboards" />
+        <NavItem
+          icon={<FileText className="h-4 w-4" />}
+          label="Docs"
+          badge={docs?.length}
+          active={pathname?.startsWith("/docs")}
+          onClick={() => router.push("/docs")}
+        />
       </nav>
 
       {favLists.length > 0 && (
@@ -259,7 +270,7 @@ function SpaceItem({ space }: { space: SpaceNode }) {
   const router = useRouter();
   const { createList, createFolder, rename, remove } = useHierarchy();
   const [open, setOpen] = useState(true);
-  const [creating, setCreating] = useState<"list" | "folder" | null>(null);
+  const [creating, setCreating] = useState<"list" | "folder" | "sprint-folder" | null>(null);
   const [renaming, setRenaming] = useState(false);
   const hasChildren = space.folders.length > 0 || space.lists.length > 0;
 
@@ -302,6 +313,7 @@ function SpaceItem({ space }: { space: SpaceNode }) {
           <>
             <MenuItem icon={<ListIcon className="h-4 w-4" />} label="New List" onSelect={() => { setOpen(true); setCreating("list"); }} />
             <MenuItem icon={<FolderPlus className="h-4 w-4" />} label="New Folder" onSelect={() => { setOpen(true); setCreating("folder"); }} />
+            <MenuItem icon={<Target className="h-4 w-4" />} label="New Sprint Folder" onSelect={() => { setOpen(true); setCreating("sprint-folder"); }} />
           </>
         }
       />
@@ -338,6 +350,9 @@ function SpaceItem({ space }: { space: SpaceNode }) {
               onCancel={() => setCreating(null)}
             />
           )}
+          {creating === "sprint-folder" && (
+            <SprintFolderDialog spaceId={space.id} onClose={() => setCreating(null)} />
+          )}
         </div>
       )}
     </div>
@@ -345,6 +360,7 @@ function SpaceItem({ space }: { space: SpaceNode }) {
 }
 
 function FolderItem({ folder }: { folder: FolderNode }) {
+  if (folder.kind === "SPRINT") return <SprintFolderItem folder={folder} />;
   const router = useRouter();
   const { createList, rename, remove } = useHierarchy();
   const [open, setOpen] = useState(false);
@@ -403,6 +419,29 @@ function FolderItem({ folder }: { folder: FolderNode }) {
   );
 }
 
+function SprintFolderItem({ folder }: { folder: FolderNode }) {
+  const pathname = usePathname();
+  const [open, setOpen] = useState(pathname === `/sf/${folder.id}` || folder.sprints.some((sprint) => pathname === `/s/${sprint.id}`));
+  const active = pathname === `/sf/${folder.id}`;
+  return (
+    <div>
+      <div className={cn("group flex items-center gap-1.5 rounded-md py-1.5 pr-2 text-[13px] hover:bg-cu-hover-strong", active && "bg-cu-sidebar-active font-medium text-cu-purple-dark")} style={{ paddingLeft: 18 }}>
+        <button onClick={() => setOpen((value) => !value)} className="flex h-4 w-4 items-center justify-center text-cu-text-tertiary">
+          {folder.sprints.length > 0 ? open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" /> : null}
+        </button>
+        <Link href={`/sf/${folder.id}`} className="flex min-w-0 flex-1 items-center gap-1.5">
+          <Target className={cn("h-4 w-4 shrink-0", active ? "text-cu-purple" : "text-cu-text-secondary")} />
+          <span className="truncate">{folder.name}</span>
+        </Link>
+      </div>
+      {open && folder.sprints.map((sprint) => {
+        const sprintActive = pathname === `/s/${sprint.id}`;
+        return <Link key={sprint.id} href={`/s/${sprint.id}`} className={cn("flex items-center gap-2 rounded-md py-1.5 pr-2 text-[13px] hover:bg-cu-hover-strong", sprintActive ? "bg-cu-sidebar-active font-medium text-cu-purple-dark" : "text-cu-text")} style={{ paddingLeft: 50 }}><span className={cn("h-2 w-2 shrink-0 rounded-full", sprint.status === "ACTIVE" ? "bg-cu-purple" : sprint.status === "COMPLETED" ? "bg-cu-success" : sprint.status === "CANCELLED" ? "bg-cu-text-tertiary" : "bg-amber-500")} /><span className="truncate">{sprint.name}</span><span className="ml-auto text-[10px] text-cu-text-tertiary">{sprint.taskCount}</span></Link>;
+      })}
+    </div>
+  );
+}
+
 function ListItemRow({ list, depth }: { list: ListNode & { spaceId?: string }; depth: number }) {
   const params = useParams();
   const router = useRouter();
@@ -441,7 +480,7 @@ function ListItemRow({ list, depth }: { list: ListNode & { spaceId?: string }; d
       />
       <span className="truncate">{list.name}</span>
       <span className="ml-auto flex items-center gap-1">
-        <span className="hidden text-[11px] text-cu-text-tertiary group-hover:inline">{list._count.tasks}</span>
+        <span className="hidden text-[11px] text-cu-text-tertiary group-hover:inline">{list._count?.tasks ?? 0}</span>
         <RowMenu
           onRename={() => setRenaming(true)}
           onDelete={() => {
@@ -495,7 +534,11 @@ function Row({
       {addMenu ? (
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
-            <button className="hidden rounded p-0.5 text-cu-text-tertiary hover:bg-cu-hover group-hover:block" title="Add">
+            <button
+              onClick={(e) => e.stopPropagation()}
+              className="rounded p-0.5 text-cu-text-tertiary opacity-0 hover:bg-cu-hover group-hover:opacity-100 data-[state=open]:opacity-100 data-[state=open]:bg-cu-hover"
+              title="Add"
+            >
               <Plus className="h-3.5 w-3.5" />
             </button>
           </DropdownMenu.Trigger>
@@ -506,7 +549,11 @@ function Row({
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
       ) : onAdd ? (
-        <button onClick={onAdd} className="hidden rounded p-0.5 text-cu-text-tertiary hover:bg-cu-hover group-hover:block" title="New List">
+        <button
+          onClick={(e) => { e.stopPropagation(); onAdd(); }}
+          className="rounded p-0.5 text-cu-text-tertiary opacity-0 hover:bg-cu-hover group-hover:opacity-100"
+          title="New List"
+        >
           <Plus className="h-3.5 w-3.5" />
         </button>
       ) : null}
@@ -519,8 +566,8 @@ function RowMenu({ onRename, onDelete }: { onRename?: () => void; onDelete?: () 
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
-          className="hidden rounded p-0.5 text-cu-text-tertiary hover:bg-cu-hover group-hover:block"
+          onClick={(e) => { e.stopPropagation(); }}
+          className="rounded p-0.5 text-cu-text-tertiary opacity-0 hover:bg-cu-hover group-hover:opacity-100 data-[state=open]:opacity-100 data-[state=open]:bg-cu-hover"
         >
           <Ellipsis className="h-3.5 w-3.5" />
         </button>

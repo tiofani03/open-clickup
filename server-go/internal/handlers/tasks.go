@@ -34,6 +34,7 @@ type CreateTaskReq struct {
 	StartDate    *string  `json:"startDate"`
 	DueDate      *string  `json:"dueDate"`
 	TimeEstimate *int32   `json:"timeEstimate"`
+	SprintPoints *int32   `json:"sprintPoints"`
 	Assignees    []string `json:"assigneeIds"`
 }
 
@@ -113,6 +114,27 @@ func (h *TasksHandler) getFormattedTask(ctx context.Context, taskID string) (dto
 	if task.TimeEstimate.Valid {
 		est = &task.TimeEstimate.Int32
 	}
+	var sprintPoints *int32
+	if task.SprintPoints.Valid {
+		sprintPoints = &task.SprintPoints.Int32
+	}
+	historyRows, _ := h.q.ListTaskSprintHistory(ctx, pgtype.Text{String: taskID, Valid: true})
+	sprintHistory := make([]dto.TaskSprintHistoryResponse, len(historyRows))
+	for i, row := range historyRows {
+		var outcome *string
+		if row.Outcome.Valid {
+			value := string(row.Outcome.SprintTaskOutcome)
+			outcome = &value
+		}
+		sprintHistory[i] = dto.TaskSprintHistoryResponse{
+			MembershipID: row.ID, SprintID: row.SprintId, SprintFolderID: row.SprintFolderId,
+			SprintName: row.SprintName, SprintFolderName: row.FolderName, SprintStatus: string(row.SprintStatus),
+			Outcome: outcome, StartsAt: row.StartsAt.Time.UTC().Format(time.RFC3339Nano), EndsAt: row.EndsAt.Time.UTC().Format(time.RFC3339Nano),
+			AddedAt: row.AddedAt.Time.UTC().Format(time.RFC3339Nano), RemovedAt: timestamptzOrNil(row.RemovedAt),
+			PointsAtAdd: int4OrNil(row.PointsAtAdd), ForecastPoints: int4OrNil(row.ForecastPoints),
+			PointsAtClose: int4OrNil(row.PointsAtClose), CarriedFromMembershipID: textOrNil(row.CarriedFromMembershipId),
+		}
+	}
 
 	return dto.TaskResponse{
 		ID:           task.ID,
@@ -126,6 +148,7 @@ func (h *TasksHandler) getFormattedTask(ctx context.Context, taskID string) (dto
 		StartDate:    startStr,
 		DueDate:      dueStr,
 		TimeEstimate: est,
+		SprintPoints: sprintPoints,
 		CreatedByID:  textOrNil(task.CreatedById),
 		CreatedAt:    task.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
 		UpdatedAt:    task.UpdatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
@@ -149,6 +172,7 @@ func (h *TasksHandler) getFormattedTask(ctx context.Context, taskID string) (dto
 			Checklists: 0,
 			Subtasks:   len(subtaskList),
 		},
+		SprintHistory: sprintHistory,
 	}, nil
 }
 
@@ -207,6 +231,13 @@ func (h *TasksHandler) CreateTask(c *fiber.Ctx) error {
 	if req.TimeEstimate != nil {
 		est = pgtype.Int4{Int32: *req.TimeEstimate, Valid: true}
 	}
+	var sprintPoints pgtype.Int4
+	if req.SprintPoints != nil {
+		if *req.SprintPoints < 0 {
+			return sendError(c, fiber.StatusBadRequest, "sprintPoints must be non-negative")
+		}
+		sprintPoints = pgtype.Int4{Int32: *req.SprintPoints, Valid: true}
+	}
 
 	task, err := h.q.CreateTask(ctx, db.CreateTaskParams{
 		ID:           taskID,
@@ -220,6 +251,7 @@ func (h *TasksHandler) CreateTask(c *fiber.Ctx) error {
 		StartDate:    startDate,
 		DueDate:      dueDate,
 		TimeEstimate: est,
+		SprintPoints: sprintPoints,
 		CreatedById:  pgtype.Text{String: user.UserId, Valid: true},
 		Recurrence:   pgtype.Text{Valid: false},
 	})
@@ -347,38 +379,238 @@ func (h *TasksHandler) GetTask(c *fiber.Ctx) error {
 		}
 	}
 
+	watchers, _ := h.q.ListTaskWatchers(ctx, taskID)
+	watcherList := make([]dto.TaskWatcherResponse, len(watchers))
+	for wi, w := range watchers {
+		watcherList[wi] = dto.TaskWatcherResponse{
+			User: dto.UserResponse{
+				ID:        w.UserId,
+				Name:      w.UserName,
+				Email:     w.UserEmail,
+				Color:     w.UserColor,
+				AvatarURL: textOrNil(w.UserAvatarUrl),
+			},
+		}
+	}
+
+	attachments, _ := h.q.ListTaskAttachments(ctx, taskID)
+	attachmentList := make([]dto.TaskAttachmentResponse, len(attachments))
+	for ai, a := range attachments {
+		attachmentList[ai] = dto.TaskAttachmentResponse{
+			ID:        a.ID,
+			TaskID:    a.TaskId,
+			FileName:  a.FileName,
+			FileSize:  int64(a.FileSize),
+			MimeType:  a.MimeType,
+			URL:       a.Url,
+			CreatedAt: a.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+		}
+	}
+
+	timeEntries, _ := h.q.ListTaskTimeEntries(ctx, taskID)
+	timeEntryList := make([]dto.TaskTimeEntryResponse, len(timeEntries))
+	for ti, te := range timeEntries {
+		var endedAt *string
+		if te.EndedAt.Valid {
+			s := te.EndedAt.Time.Format("2006-01-02T15:04:05.000Z")
+			endedAt = &s
+		}
+		var dur *int32
+		d := te.Duration
+		dur = &d
+
+		timeEntryList[ti] = dto.TaskTimeEntryResponse{
+			ID:          te.ID,
+			TaskID:      te.TaskId,
+			UserID:      te.UserId,
+			StartedAt:   te.StartedAt.Time.Format("2006-01-02T15:04:05.000Z"),
+			EndedAt:     endedAt,
+			Duration:    dur,
+			Description: textOrNil(te.Description),
+			User: dto.UserResponse{
+				ID:        te.UserId,
+				Name:      te.UserName,
+				Email:     te.UserEmail,
+				Color:     te.UserColor,
+				AvatarURL: textOrNil(te.UserAvatarUrl),
+			},
+		}
+	}
+
+	blockedBy, _ := h.q.ListTaskBlockedBy(ctx, taskID)
+	blockedByList := make([]dto.TaskBlockedByResponse, len(blockedBy))
+	for bi, b := range blockedBy {
+		blockedByList[bi] = dto.TaskBlockedByResponse{
+			ID: b.ID,
+			Blocker: dto.TaskDependencyBlockerItem{
+				ID:     b.BlockerTaskID,
+				Name:   b.BlockerName,
+				ListID: b.BlockerListID,
+				Status: dto.StatusResponse{
+					Name:  b.StatusName,
+					Color: b.StatusColor,
+					Type:  string(b.StatusType),
+				},
+			},
+		}
+	}
+
+	blocking, _ := h.q.ListTaskBlocking(ctx, taskID)
+	blockingList := make([]dto.TaskBlockingResponse, len(blocking))
+	for bi, b := range blocking {
+		blockingList[bi] = dto.TaskBlockingResponse{
+			ID: b.ID,
+			Blocked: dto.TaskDependencyBlockerItem{
+				ID:     b.BlockedTaskID,
+				Name:   b.BlockedName,
+				ListID: b.BlockedListID,
+				Status: dto.StatusResponse{
+					Name:  b.StatusName,
+					Color: b.StatusColor,
+					Type:  string(b.StatusType),
+				},
+			},
+		}
+	}
+
+	var createdBy *dto.UserResponse
+	if task.CreatedById.Valid && task.CreatedById.String != "" {
+		if u, err := h.q.GetUserByID(ctx, task.CreatedById.String); err == nil {
+			createdBy = &dto.UserResponse{
+				ID:        u.ID,
+				Name:      u.Name,
+				Email:     u.Email,
+				Color:     u.Color,
+				AvatarURL: textOrNil(u.AvatarUrl),
+			}
+		}
+	}
+
+	listStatuses, _ := h.q.ListStatusesByList(ctx, task.ListId)
+	statusList := make([]dto.StatusResponse, len(listStatuses))
+	for si, s := range listStatuses {
+		statusList[si] = dto.StatusResponse{
+			ID:       s.ID,
+			ListID:   s.ListId,
+			Name:     s.Name,
+			Color:    s.Color,
+			Type:     string(s.Type),
+			Position: s.Position,
+		}
+	}
+
 	formatted.Count.Comments = len(commentList)
 	formatted.Count.Checklists = len(checklistList)
 
 	return c.JSON(dto.TaskDetailResponse{
 		TaskResponse: formatted,
-		List: dto.TaskListMetaResponse{
-			ID:   task.ListId,
-			Name: task.ListName,
+		CreatedBy:    createdBy,
+		Watchers:     watcherList,
+		Attachments:  attachmentList,
+		TimeEntries:  timeEntryList,
+		BlockedBy:    blockedByList,
+		Blocking:     blockingList,
+		Checklists:   checklistList,
+		Comments:     commentList,
+		Activities:   activityList,
+		List: dto.TaskListDetailResponse{
+			ID:           task.ListId,
+			Name:         task.ListName,
+			SpaceID:      task.SpaceID,
+			Statuses:     statusList,
+			CustomFields: []interface{}{},
 		},
 		Space: dto.SpaceMetaResponse{
 			ID:   task.SpaceID,
 			Name: task.SpaceName,
 		},
-		Checklists: checklistList,
-		Comments:   commentList,
-		Activities: activityList,
 	})
 }
 
+func (h *TasksHandler) GetMyTasks(c *fiber.Ctx) error {
+	user := c.Locals("user").(*db.GetSessionWithUserRow)
+	ctx := c.Context()
+
+	tasks, err := h.q.ListMyTasks(ctx, user.UserId)
+	if err != nil {
+		return sendError(c, fiber.StatusInternalServerError, err.Error())
+	}
+
+	result := make([]dto.MyTaskResponse, len(tasks))
+	for i, t := range tasks {
+		var prio *string
+		if t.Priority.Valid {
+			p := string(t.Priority.Priority)
+			prio = &p
+		}
+		var startStr, dueStr *string
+		if t.StartDate.Valid {
+			s := t.StartDate.Time.Format("2006-01-02T15:04:05.000Z")
+			startStr = &s
+		}
+		if t.DueDate.Valid {
+			s := t.DueDate.Time.Format("2006-01-02T15:04:05.000Z")
+			dueStr = &s
+		}
+		result[i] = dto.MyTaskResponse{
+			ID:        t.ID,
+			Name:      t.Name,
+			ListID:    t.ListId,
+			Priority:  prio,
+			StartDate: startStr,
+			DueDate:   dueStr,
+			Status: dto.MyTaskStatusResponse{
+				Name:  t.StatusName,
+				Color: t.StatusColor,
+				Type:  string(t.StatusType),
+			},
+			List: dto.MyTaskListResponse{
+				Name: t.ListName,
+				Space: dto.MyTaskSpaceResponse{
+					Name:  t.SpaceName,
+					Color: t.SpaceColor,
+				},
+			},
+		}
+	}
+
+	return c.JSON(fiber.Map{"tasks": result})
+}
+
+type optionalInt32 struct {
+	Set   bool
+	Value *int32
+}
+
+func (value *optionalInt32) UnmarshalJSON(data []byte) error {
+	value.Set = true
+	if string(data) == "null" {
+		value.Value = nil
+		return nil
+	}
+	var parsed int32
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return err
+	}
+	value.Value = &parsed
+	return nil
+}
+
 type UpdateTaskReq struct {
-	Name         *string   `json:"name"`
-	Description  *string   `json:"description"`
-	StatusID     *string   `json:"statusId"`
-	Priority     *string   `json:"priority"`
-	Position     *float64  `json:"position"`
-	StartDate    *string   `json:"startDate"`
-	DueDate      *string   `json:"dueDate"`
-	TimeEstimate *int32    `json:"timeEstimate"`
-	Archived     *bool     `json:"archived"`
-	Recurrence   *string   `json:"recurrence"`
-	AssigneeIDs  *[]string `json:"assigneeIds"`
-	TagIDs       *[]string `json:"tagIds"`
+	Name         *string       `json:"name"`
+	Description  *string       `json:"description"`
+	StatusID     *string       `json:"statusId"`
+	Priority     *string       `json:"priority"`
+	Position     *float64      `json:"position"`
+	StartDate    *string       `json:"startDate"`
+	DueDate      *string       `json:"dueDate"`
+	TimeEstimate *int32        `json:"timeEstimate"`
+	SprintPoints optionalInt32 `json:"sprintPoints"`
+	Archived     *bool         `json:"archived"`
+	Recurrence   *string       `json:"recurrence"`
+	AssigneeIDs  *[]string     `json:"assigneeIds"`
+	TagIDs       *[]string     `json:"tagIds"`
+	WatcherIDs   *[]string     `json:"watcherIds"`
 }
 
 func (h *TasksHandler) UpdateTask(c *fiber.Ctx) error {
@@ -421,7 +653,7 @@ func (h *TasksHandler) UpdateTask(c *fiber.Ctx) error {
 	if req.StatusID != nil && *req.StatusID != existing.StatusId {
 		statusID = *req.StatusID
 		st, _ := h.q.GetStatusByID(ctx, statusID)
-		if st.Type == db.StatusTypeDONE {
+		if st.Type == db.StatusTypeDONE || st.Type == db.StatusTypeCLOSED {
 			completedAt = pgtype.Timestamp{Time: time.Now(), Valid: true}
 		} else {
 			completedAt = pgtype.Timestamp{Valid: false}
@@ -485,6 +717,17 @@ func (h *TasksHandler) UpdateTask(c *fiber.Ctx) error {
 	if req.TimeEstimate != nil {
 		est = pgtype.Int4{Int32: *req.TimeEstimate, Valid: true}
 	}
+	sprintPoints := existing.SprintPoints
+	if req.SprintPoints.Set {
+		if req.SprintPoints.Value != nil {
+			if *req.SprintPoints.Value < 0 {
+				return sendError(c, fiber.StatusBadRequest, "sprintPoints must be non-negative")
+			}
+			sprintPoints = pgtype.Int4{Int32: *req.SprintPoints.Value, Valid: true}
+		} else {
+			sprintPoints = pgtype.Int4{}
+		}
+	}
 
 	arch := existing.Archived
 	if req.Archived != nil {
@@ -509,9 +752,20 @@ func (h *TasksHandler) UpdateTask(c *fiber.Ctx) error {
 		CompletedAt:  completedAt,
 		Archived:     arch,
 		Recurrence:   rec,
+		SprintPoints: sprintPoints,
 	})
 	if err != nil {
 		return sendError(c, fiber.StatusInternalServerError, err.Error())
+	}
+	if req.StatusID != nil && *req.StatusID != existing.StatusId {
+		h.recordSprintEventForTask(ctx, taskID, user.UserId, task.Name, db.SprintEventTypeSTATUSCHANGED, fiber.Map{
+			"fromStatusId": existing.StatusId, "toStatusId": task.StatusId,
+		})
+	}
+	if req.SprintPoints.Set && (existing.SprintPoints.Valid != task.SprintPoints.Valid || existing.SprintPoints.Int32 != task.SprintPoints.Int32) {
+		h.recordSprintEventForTask(ctx, taskID, user.UserId, task.Name, db.SprintEventTypePOINTSCHANGED, fiber.Map{
+			"from": int4OrNil(existing.SprintPoints), "to": int4OrNil(task.SprintPoints),
+		})
 	}
 
 	// Assignees full replacement if provided
@@ -536,6 +790,14 @@ func (h *TasksHandler) UpdateTask(c *fiber.Ctx) error {
 		}
 	}
 
+	// Watchers full replacement if provided
+	if req.WatcherIDs != nil {
+		_, _ = h.pool.Exec(ctx, `DELETE FROM "TaskWatcher" WHERE "taskId" = $1`, taskID)
+		for _, uid := range *req.WatcherIDs {
+			_, _ = h.pool.Exec(ctx, `INSERT INTO "TaskWatcher" ("taskId", "userId") VALUES ($1, $2) ON CONFLICT DO NOTHING`, taskID, uid)
+		}
+	}
+
 	realtime.DefaultHub.Broadcast(realtime.Event{
 		Type:   "list",
 		ListID: task.ListId,
@@ -550,10 +812,18 @@ func (h *TasksHandler) UpdateTask(c *fiber.Ctx) error {
 
 func (h *TasksHandler) DeleteTask(c *fiber.Ctx) error {
 	taskID := c.Params("taskId")
+	user := c.Locals("user").(*db.GetSessionWithUserRow)
 	ctx := c.Context()
 
 	task, err := h.q.GetTaskByID(ctx, taskID)
 	if err == nil {
+		h.recordSprintEventForTask(ctx, taskID, user.UserId, task.Name, db.SprintEventTypeTASKREMOVED, fiber.Map{"reason": "deleted"})
+		_, _ = h.pool.Exec(ctx, `
+			UPDATE "SprintTask"
+			SET outcome = 'DELETED', "pointsAtClose" = $2, "timeEstimateAtClose" = $3,
+			    "taskNameSnapshot" = $4, "homeListIdSnapshot" = $5, "homeListNameSnapshot" = $6
+			WHERE "taskId" = $1 AND outcome IS NULL
+		`, taskID, task.SprintPoints, task.TimeEstimate, task.Name, task.ListId, task.ListName)
 		_ = h.q.DeleteTask(ctx, taskID)
 		realtime.DefaultHub.Broadcast(realtime.Event{
 			Type:   "list",
@@ -570,9 +840,10 @@ type BulkTasksReq struct {
 	IDs    []string `json:"ids"`
 	Delete *bool    `json:"delete"`
 	Patch  *struct {
-		StatusID    *string  `json:"statusId"`
-		Priority    *string  `json:"priority"`
-		AssigneeIDs []string `json:"assigneeIds"`
+		StatusID     *string       `json:"statusId"`
+		Priority     *string       `json:"priority"`
+		AssigneeIDs  []string      `json:"assigneeIds"`
+		SprintPoints optionalInt32 `json:"sprintPoints"`
 	} `json:"patch"`
 }
 
@@ -603,16 +874,30 @@ func (h *TasksHandler) BulkTasks(c *fiber.Ctx) error {
 
 	if req.Delete != nil && *req.Delete {
 		for _, id := range req.IDs {
+			if task, err := h.q.GetTaskByID(ctx, id); err == nil {
+				user := c.Locals("user").(*db.GetSessionWithUserRow)
+				h.recordSprintEventForTask(ctx, id, user.UserId, task.Name, db.SprintEventTypeTASKREMOVED, fiber.Map{"reason": "deleted"})
+				_, _ = h.pool.Exec(ctx, `
+					UPDATE "SprintTask" SET outcome = 'DELETED', "pointsAtClose" = $2,
+					"timeEstimateAtClose" = $3, "taskNameSnapshot" = $4,
+					"homeListIdSnapshot" = $5, "homeListNameSnapshot" = $6
+					WHERE "taskId" = $1 AND outcome IS NULL
+				`, id, task.SprintPoints, task.TimeEstimate, task.Name, task.ListId, task.ListName)
+			}
 			_ = h.q.DeleteTask(ctx, id)
 		}
 	} else if req.Patch != nil {
 		if req.Patch.StatusID != nil {
 			var completedAt interface{} = nil
 			st, err := h.q.GetStatusByID(ctx, *req.Patch.StatusID)
-			if err == nil && st.Type == db.StatusTypeDONE {
+			if err == nil && (st.Type == db.StatusTypeDONE || st.Type == db.StatusTypeCLOSED) {
 				completedAt = time.Now()
 			}
 			_, _ = h.pool.Exec(ctx, `UPDATE "Task" SET "statusId" = $1, "completedAt" = $2, "updatedAt" = NOW() WHERE id = ANY($3)`, *req.Patch.StatusID, completedAt, req.IDs)
+			user := c.Locals("user").(*db.GetSessionWithUserRow)
+			for _, taskID := range req.IDs {
+				h.recordSprintEventForTask(ctx, taskID, user.UserId, "", db.SprintEventTypeSTATUSCHANGED, fiber.Map{"toStatusId": *req.Patch.StatusID})
+			}
 		}
 		if req.Patch.Priority != nil {
 			if *req.Patch.Priority != "" {
@@ -632,6 +917,20 @@ func (h *TasksHandler) BulkTasks(c *fiber.Ctx) error {
 				}
 			}
 		}
+		if req.Patch.SprintPoints.Set {
+			var points any
+			if req.Patch.SprintPoints.Value != nil {
+				if *req.Patch.SprintPoints.Value < 0 {
+					return sendError(c, fiber.StatusBadRequest, "sprintPoints must be non-negative")
+				}
+				points = *req.Patch.SprintPoints.Value
+			}
+			_, _ = h.pool.Exec(ctx, `UPDATE "Task" SET "sprintPoints" = $1, "updatedAt" = NOW() WHERE id = ANY($2)`, points, req.IDs)
+			user := c.Locals("user").(*db.GetSessionWithUserRow)
+			for _, taskID := range req.IDs {
+				h.recordSprintEventForTask(ctx, taskID, user.UserId, "", db.SprintEventTypePOINTSCHANGED, fiber.Map{"to": points})
+			}
+		}
 	}
 
 	for _, lid := range listIDs {
@@ -643,4 +942,35 @@ func (h *TasksHandler) BulkTasks(c *fiber.Ctx) error {
 
 	count := len(req.IDs)
 	return c.JSON(dto.OKResponse{OK: true, Count: &count})
+}
+
+func (h *TasksHandler) recordSprintEventForTask(
+	ctx context.Context,
+	taskID string,
+	userID string,
+	taskName string,
+	eventType db.SprintEventType,
+	data any,
+) {
+	rows, err := h.pool.Query(ctx, `
+		SELECT "sprintId" FROM "SprintTask"
+		WHERE "taskId" = $1 AND outcome IS NULL AND "removedAt" IS NULL
+	`, taskID)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	payload, _ := json.Marshal(data)
+	for rows.Next() {
+		var sprintID string
+		if rows.Scan(&sprintID) != nil {
+			continue
+		}
+		_, _ = h.q.CreateSprintEvent(ctx, db.CreateSprintEventParams{
+			ID: cuid(), SprintId: sprintID, TaskId: pgtype.Text{String: taskID, Valid: true},
+			ActorId: pgtype.Text{String: userID, Valid: userID != ""}, Type: eventType,
+			Data: payload, TaskNameSnapshot: pgtype.Text{String: taskName, Valid: taskName != ""},
+		})
+		realtime.DefaultHub.Broadcast(realtime.Event{Type: "sprint", SprintID: sprintID})
+	}
 }

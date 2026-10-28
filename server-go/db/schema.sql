@@ -39,6 +39,16 @@ CREATE TYPE public."CustomFieldType" AS ENUM (
 
 
 --
+-- Name: FolderKind; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public."FolderKind" AS ENUM (
+    'STANDARD',
+    'SPRINT'
+);
+
+
+--
 -- Name: MemberRole; Type: TYPE; Schema: public; Owner: -
 --
 
@@ -71,6 +81,47 @@ CREATE TYPE public."StatusType" AS ENUM (
     'ACTIVE',
     'DONE',
     'CLOSED'
+);
+
+
+--
+-- Name: Sprint enums; Type: TYPE; Schema: public; Owner: -
+--
+
+CREATE TYPE public."SprintStatus" AS ENUM (
+    'PLANNED',
+    'ACTIVE',
+    'COMPLETED',
+    'CANCELLED'
+);
+
+CREATE TYPE public."SprintEstimationMetric" AS ENUM (
+    'POINTS',
+    'TIME'
+);
+
+CREATE TYPE public."SprintTaskOutcome" AS ENUM (
+    'COMPLETED',
+    'CARRIED_OVER',
+    'UNFINISHED',
+    'REMOVED',
+    'CANCELLED',
+    'DELETED'
+);
+
+CREATE TYPE public."SprintEventType" AS ENUM (
+    'SPRINT_CREATED',
+    'SPRINT_STARTED',
+    'SPRINT_COMPLETED',
+    'SPRINT_CANCELLED',
+    'FORECAST_LOCKED',
+    'TASK_ADDED',
+    'TASK_REMOVED',
+    'TASK_CARRIED_OVER',
+    'TASK_COMPLETED',
+    'TASK_REOPENED',
+    'POINTS_CHANGED',
+    'STATUS_CHANGED'
 );
 
 
@@ -232,6 +283,7 @@ CREATE TABLE public."Folder" (
     id text NOT NULL,
     "spaceId" text NOT NULL,
     name text NOT NULL,
+    kind public."FolderKind" DEFAULT 'STANDARD'::public."FolderKind" NOT NULL,
     "position" double precision DEFAULT 0 NOT NULL,
     collapsed boolean DEFAULT false NOT NULL,
     "createdAt" timestamp(3) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
@@ -341,12 +393,14 @@ CREATE TABLE public."Task" (
     "startDate" timestamp(3) without time zone,
     "dueDate" timestamp(3) without time zone,
     "timeEstimate" integer,
+    "sprintPoints" integer,
     "createdById" text,
     "createdAt" timestamp(3) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     "updatedAt" timestamp(3) without time zone NOT NULL,
     "completedAt" timestamp(3) without time zone,
     archived boolean DEFAULT false NOT NULL,
-    recurrence text
+    recurrence text,
+    CONSTRAINT "Task_sprintPoints_check" CHECK (("sprintPoints" IS NULL) OR ("sprintPoints" >= 0))
 );
 
 
@@ -1314,4 +1368,143 @@ ALTER TABLE ONLY public."WorkspaceMember"
 -- PostgreSQL database dump complete
 --
 
+CREATE TABLE "Doc" (
+    "id" TEXT PRIMARY KEY,
+    "workspace_id" TEXT NOT NULL REFERENCES "Workspace"("id") ON DELETE CASCADE,
+    "space_id" TEXT REFERENCES "Space"("id") ON DELETE CASCADE,
+    "folder_id" TEXT REFERENCES "Folder"("id") ON DELETE SET NULL,
+    "list_id" TEXT REFERENCES "List"("id") ON DELETE SET NULL,
+    "task_id" TEXT REFERENCES "Task"("id") ON DELETE SET NULL,
+    "title" TEXT NOT NULL DEFAULT 'Untitled Doc',
+    "created_by_id" TEXT NOT NULL REFERENCES "User"("id"),
+    "is_pinned" BOOLEAN NOT NULL DEFAULT FALSE,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 
+CREATE INDEX "idx_doc_workspace" ON "Doc"("workspace_id");
+CREATE INDEX "idx_doc_space" ON "Doc"("space_id");
+CREATE INDEX "idx_doc_list" ON "Doc"("list_id");
+CREATE INDEX "idx_doc_task" ON "Doc"("task_id");
+
+CREATE TABLE "DocPage" (
+    "id" TEXT PRIMARY KEY,
+    "doc_id" TEXT NOT NULL REFERENCES "Doc"("id") ON DELETE CASCADE,
+    "parent_page_id" TEXT REFERENCES "DocPage"("id") ON DELETE CASCADE,
+    "title" TEXT NOT NULL DEFAULT 'Untitled Page',
+    "content_markdown" TEXT NOT NULL DEFAULT '',
+    "content_html" TEXT NOT NULL DEFAULT '',
+    "icon" TEXT,
+    "cover_image" TEXT,
+    "position" DOUBLE PRECISION NOT NULL DEFAULT 65535.0,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "is_published" BOOLEAN NOT NULL DEFAULT true,
+    "has_draft" BOOLEAN NOT NULL DEFAULT false,
+    "draft_markdown" TEXT,
+    "draft_html" TEXT
+);
+
+CREATE INDEX "idx_doc_page_doc" ON "DocPage"("doc_id");
+CREATE INDEX "idx_doc_page_parent" ON "DocPage"("parent_page_id");
+
+CREATE TABLE "DocComment" (
+    "id" TEXT PRIMARY KEY,
+    "doc_page_id" TEXT NOT NULL REFERENCES "DocPage"("id") ON DELETE CASCADE,
+    "user_id" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE,
+    "body" TEXT NOT NULL,
+    "parent_id" TEXT REFERENCES "DocComment"("id") ON DELETE CASCADE,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    "updated_at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX "idx_doc_comment_page" ON "DocComment"("doc_page_id");
+CREATE INDEX "idx_doc_comment_parent" ON "DocComment"("parent_id");
+
+CREATE TABLE public."SprintFolderSettings" (
+    "folderId" text PRIMARY KEY REFERENCES public."Folder"(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    "durationDays" integer DEFAULT 14 NOT NULL CHECK ("durationDays" BETWEEN 1 AND 90),
+    "startDayOfWeek" integer DEFAULT 1 NOT NULL CHECK ("startDayOfWeek" BETWEEN 0 AND 6),
+    "startTime" time DEFAULT '09:00:00' NOT NULL,
+    timezone text DEFAULT 'UTC' NOT NULL,
+    "estimationMetric" public."SprintEstimationMetric" DEFAULT 'POINTS' NOT NULL,
+    "pointScale" integer[] DEFAULT ARRAY[1, 2, 3, 5, 8, 13] NOT NULL,
+    "createdAt" timestamp with time zone DEFAULT now() NOT NULL,
+    "updatedAt" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public."SprintFolderSourceList" (
+    "sprintFolderId" text NOT NULL REFERENCES public."Folder"(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    "listId" text NOT NULL REFERENCES public."List"(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    position double precision DEFAULT 0 NOT NULL,
+    "createdAt" timestamp with time zone DEFAULT now() NOT NULL,
+    PRIMARY KEY ("sprintFolderId", "listId")
+);
+
+CREATE TABLE public."Sprint" (
+    id text PRIMARY KEY,
+    "sprintFolderId" text NOT NULL REFERENCES public."Folder"(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    name text NOT NULL,
+    goal text,
+    status public."SprintStatus" DEFAULT 'PLANNED' NOT NULL,
+    "startsAt" timestamp with time zone NOT NULL,
+    "endsAt" timestamp with time zone NOT NULL,
+    "timezoneSnapshot" text NOT NULL,
+    "forecastLockedAt" timestamp with time zone,
+    "startedAt" timestamp with time zone,
+    "completedAt" timestamp with time zone,
+    "createdById" text REFERENCES public."User"(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    "createdAt" timestamp with time zone DEFAULT now() NOT NULL,
+    "updatedAt" timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT "Sprint_dates_check" CHECK ("startsAt" < "endsAt"),
+    CONSTRAINT "Sprint_folder_name_key" UNIQUE ("sprintFolderId", name)
+);
+
+CREATE TABLE public."SprintTask" (
+    id text PRIMARY KEY,
+    "sprintId" text NOT NULL REFERENCES public."Sprint"(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    "sprintFolderId" text NOT NULL REFERENCES public."Folder"(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    "taskId" text REFERENCES public."Task"(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    position double precision DEFAULT 0 NOT NULL,
+    "addedAt" timestamp with time zone DEFAULT now() NOT NULL,
+    "addedById" text REFERENCES public."User"(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    "removedAt" timestamp with time zone,
+    "removedById" text REFERENCES public."User"(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    outcome public."SprintTaskOutcome",
+    "carriedFromMembershipId" text REFERENCES public."SprintTask"(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    "pointsAtAdd" integer,
+    "forecastPoints" integer,
+    "pointsAtClose" integer,
+    "timeEstimateAtForecast" integer,
+    "timeEstimateAtClose" integer,
+    "taskNameSnapshot" text NOT NULL,
+    "homeListIdSnapshot" text NOT NULL,
+    "homeListNameSnapshot" text NOT NULL,
+    CONSTRAINT "SprintTask_points_check" CHECK (
+        (("pointsAtAdd" IS NULL) OR ("pointsAtAdd" >= 0)) AND
+        (("forecastPoints" IS NULL) OR ("forecastPoints" >= 0)) AND
+        (("pointsAtClose" IS NULL) OR ("pointsAtClose" >= 0))
+    )
+);
+
+CREATE TABLE public."SprintEvent" (
+    id text PRIMARY KEY,
+    "sprintId" text NOT NULL REFERENCES public."Sprint"(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    "taskId" text REFERENCES public."Task"(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    "actorId" text REFERENCES public."User"(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    type public."SprintEventType" NOT NULL,
+    data jsonb DEFAULT '{}'::jsonb NOT NULL,
+    "taskNameSnapshot" text,
+    "occurredAt" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE INDEX "SprintFolderSourceList_listId_idx" ON public."SprintFolderSourceList" ("listId");
+CREATE INDEX "Sprint_sprintFolderId_idx" ON public."Sprint" ("sprintFolderId");
+CREATE UNIQUE INDEX "Sprint_one_active_per_folder_idx" ON public."Sprint" ("sprintFolderId") WHERE status = 'ACTIVE';
+CREATE INDEX "SprintTask_sprintId_idx" ON public."SprintTask" ("sprintId");
+CREATE INDEX "SprintTask_taskId_idx" ON public."SprintTask" ("taskId");
+CREATE UNIQUE INDEX "SprintTask_sprint_task_idx" ON public."SprintTask" ("sprintId", "taskId") WHERE "taskId" IS NOT NULL;
+CREATE UNIQUE INDEX "SprintTask_one_open_per_folder_idx" ON public."SprintTask" ("sprintFolderId", "taskId") WHERE "taskId" IS NOT NULL AND outcome IS NULL AND "removedAt" IS NULL;
+CREATE UNIQUE INDEX "SprintTask_carriedFrom_idx" ON public."SprintTask" ("carriedFromMembershipId") WHERE "carriedFromMembershipId" IS NOT NULL;
+CREATE INDEX "SprintEvent_sprint_occurred_idx" ON public."SprintEvent" ("sprintId", "occurredAt");
+CREATE INDEX "SprintEvent_taskId_idx" ON public."SprintEvent" ("taskId");

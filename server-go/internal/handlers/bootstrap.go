@@ -50,13 +50,24 @@ type ListNodeJSON struct {
 }
 
 type FolderNodeJSON struct {
-	ID        string         `json:"id"`
-	SpaceID   string         `json:"spaceId"`
-	Name      string         `json:"name"`
-	Position  float64        `json:"position"`
-	Collapsed bool           `json:"collapsed"`
-	CreatedAt string         `json:"createdAt"`
-	Lists     []ListNodeJSON `json:"lists"`
+	ID        string           `json:"id"`
+	SpaceID   string           `json:"spaceId"`
+	Name      string           `json:"name"`
+	Kind      string           `json:"kind"`
+	Position  float64          `json:"position"`
+	Collapsed bool             `json:"collapsed"`
+	CreatedAt string           `json:"createdAt"`
+	Lists     []ListNodeJSON   `json:"lists"`
+	Sprints   []SprintNodeJSON `json:"sprints"`
+}
+
+type SprintNodeJSON struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Status    string `json:"status"`
+	StartsAt  string `json:"startsAt"`
+	EndsAt    string `json:"endsAt"`
+	TaskCount int32  `json:"taskCount"`
 }
 
 type SpaceNodeJSON struct {
@@ -144,10 +155,23 @@ func (h *BootstrapHandler) GetBootstrap(c *fiber.Ctx) error {
 				ID:        f.ID,
 				SpaceID:   f.SpaceId,
 				Name:      f.Name,
+				Kind:      string(f.Kind),
 				Position:  f.Position,
 				Collapsed: f.Collapsed,
 				CreatedAt: f.CreatedAt.Time.Format("2006-01-02T15:04:05.000Z"),
 				Lists:     []ListNodeJSON{},
+				Sprints:   []SprintNodeJSON{},
+			}
+			if f.Kind == db.FolderKindSPRINT {
+				sprintRows, _ := h.q.ListSprintsByFolder(ctx, f.ID)
+				for _, sprint := range sprintRows {
+					fJSON.Sprints = append(fJSON.Sprints, SprintNodeJSON{
+						ID: sprint.ID, Name: sprint.Name, Status: string(sprint.Status),
+						StartsAt:  sprint.StartsAt.Time.UTC().Format("2006-01-02T15:04:05Z07:00"),
+						EndsAt:    sprint.EndsAt.Time.UTC().Format("2006-01-02T15:04:05Z07:00"),
+						TaskCount: sprint.TaskCount,
+					})
+				}
 			}
 			sJSON.Folders = append(sJSON.Folders, fJSON)
 		}

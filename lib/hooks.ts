@@ -8,7 +8,28 @@ import {
 } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { apiGet, apiSend } from "@/lib/api";
-import type { ListData, TaskWithRelations, UserLite, WorkspaceTree, TaskPatch } from "@/lib/queries";
+import type {
+  ListData,
+  TaskWithRelations,
+  UserLite,
+  WorkspaceTree,
+  TaskPatch,
+  DocItem,
+  DocPageItem,
+  DocDetail,
+  CreateDocPayload,
+  UpdateDocPayload,
+  CreateDocPagePayload,
+  UpdateDocPagePayload,
+  DocCommentItem,
+  CreateDocCommentPayload,
+  SprintFolderData,
+  SprintDetail,
+  SprintBacklogTask,
+  SprintSummary,
+  SprintReport,
+  SprintFolderReport,
+} from "@/lib/queries";
 
 export type Bootstrap = { currentUser: UserLite; workspace: WorkspaceTree; favorites: string[] };
 
@@ -38,6 +59,19 @@ export function useRealtime() {
           qc.invalidateQueries({ queryKey: ["my-tasks"] });
         } else if (event.type === "bootstrap") {
           qc.invalidateQueries({ queryKey: ["bootstrap"] });
+        } else if (event.type === "sprint" || event.type === "sprint-folder") {
+          qc.invalidateQueries({ queryKey: ["sprint"] });
+          qc.invalidateQueries({ queryKey: ["sprint-folder"] });
+          qc.invalidateQueries({ queryKey: ["sprint-backlog"] });
+          qc.invalidateQueries({ queryKey: ["sprint-report"] });
+          qc.invalidateQueries({ queryKey: ["sprint-folder-report"] });
+          qc.invalidateQueries({ queryKey: ["task"] });
+          qc.invalidateQueries({ queryKey: ["bootstrap"] });
+        } else if (event.type === "doc") {
+          qc.invalidateQueries({ queryKey: ["docs"] });
+          qc.invalidateQueries({ queryKey: ["doc"] });
+          qc.invalidateQueries({ queryKey: ["doc-page"] });
+          qc.invalidateQueries({ queryKey: ["doc-comments"] });
         }
         qc.invalidateQueries({ queryKey: ["notifications"] });
       } catch {
@@ -153,6 +187,127 @@ export function useList(listId: string | undefined) {
     // keep the previous list visible while the next one loads (no skeleton flash)
     placeholderData: keepPreviousData,
   });
+}
+
+export function useSprintFolder(folderId: string | undefined) {
+  return useQuery({
+    queryKey: ["sprint-folder", folderId],
+    queryFn: () => apiGet<SprintFolderData>(`/api/sprint-folders/${folderId}`),
+    enabled: !!folderId,
+  });
+}
+
+export function useSprint(sprintId: string | undefined) {
+  return useQuery({
+    queryKey: ["sprint", sprintId],
+    queryFn: () => apiGet<SprintDetail>(`/api/sprints/${sprintId}`),
+    enabled: !!sprintId,
+  });
+}
+
+export function useSprintBacklog(folderId: string | undefined) {
+  return useQuery({
+    queryKey: ["sprint-backlog", folderId],
+    queryFn: () => apiGet<{ tasks: SprintBacklogTask[] }>(`/api/sprint-folders/${folderId}/backlog`),
+    enabled: !!folderId,
+  });
+}
+
+export function useSprintReport(sprintId: string | undefined) {
+  return useQuery({
+    queryKey: ["sprint-report", sprintId],
+    queryFn: () => apiGet<SprintReport>(`/api/sprints/${sprintId}/report`),
+    enabled: !!sprintId,
+  });
+}
+
+export function useSprintFolderReport(folderId: string | undefined) {
+  return useQuery({
+    queryKey: ["sprint-folder-report", folderId],
+    queryFn: () => apiGet<SprintFolderReport>(`/api/sprint-folders/${folderId}/report`),
+    enabled: !!folderId,
+  });
+}
+
+export type SprintFolderPayload = {
+  spaceId: string;
+  name: string;
+  durationDays: number;
+  startDayOfWeek: number;
+  startTime: string;
+  timezone: string;
+  estimationMetric: "POINTS" | "TIME";
+  pointScale: number[];
+  sourceListIds: string[];
+};
+
+export function useSprintMutations(folderId?: string, sprintId?: string) {
+  const qc = useQueryClient();
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ["bootstrap"] });
+    qc.invalidateQueries({ queryKey: ["sprint-folder"] });
+    qc.invalidateQueries({ queryKey: ["sprint"] });
+    qc.invalidateQueries({ queryKey: ["sprint-backlog"] });
+    qc.invalidateQueries({ queryKey: ["sprint-report"] });
+    qc.invalidateQueries({ queryKey: ["sprint-folder-report"] });
+    qc.invalidateQueries({ queryKey: ["task"] });
+    qc.invalidateQueries({ queryKey: ["list"] });
+  };
+  const createFolder = useMutation({
+    mutationFn: (payload: SprintFolderPayload) => apiSend<SprintFolderData>("/api/sprint-folders", "POST", payload),
+    onSuccess: refresh,
+  });
+  const updateFolder = useMutation({
+    mutationFn: (payload: SprintFolderPayload) => apiSend<SprintFolderData>(`/api/sprint-folders/${folderId}`, "PATCH", payload),
+    onSuccess: refresh,
+  });
+  const deleteFolder = useMutation({
+    mutationFn: () => apiSend(`/api/sprint-folders/${folderId}`, "DELETE"),
+    onSuccess: refresh,
+  });
+  const createSprint = useMutation({
+    mutationFn: (payload: { name: string; goal?: string | null; startsAt: string; endsAt: string }) =>
+      apiSend<SprintSummary>(`/api/sprint-folders/${folderId}/sprints`, "POST", payload),
+    onSuccess: refresh,
+  });
+  const updateSprint = useMutation({
+    mutationFn: (payload: Partial<{ name: string; goal: string | null; startsAt: string; endsAt: string }>) =>
+      apiSend<SprintSummary>(`/api/sprints/${sprintId}`, "PATCH", payload),
+    onSuccess: refresh,
+  });
+  const deleteSprint = useMutation({
+    mutationFn: () => apiSend(`/api/sprints/${sprintId}`, "DELETE"),
+    onSuccess: refresh,
+  });
+  const addTasks = useMutation({
+    mutationFn: (payload: { taskIds: string[]; replaceExisting?: boolean }) =>
+      apiSend<SprintDetail>(`/api/sprints/${sprintId}/tasks`, "POST", payload),
+    onSuccess: refresh,
+  });
+  const removeTask = useMutation({
+    mutationFn: (taskId: string) => apiSend(`/api/sprints/${sprintId}/tasks/${taskId}`, "DELETE"),
+    onSuccess: refresh,
+  });
+  const startSprint = useMutation({
+    mutationFn: () => apiSend<SprintSummary>(`/api/sprints/${sprintId}/start`, "POST"),
+    onSuccess: refresh,
+  });
+  const completeSprint = useMutation({
+    mutationFn: (payload: {
+      defaultAction: "CARRY_OVER" | "NO_SPRINT";
+      targetSprintId?: string;
+      overrides?: Array<{ taskId: string; action: "CARRY_OVER" | "NO_SPRINT"; targetSprintId?: string }>;
+    }) => apiSend(`/api/sprints/${sprintId}/complete`, "POST", payload),
+    onSuccess: refresh,
+  });
+  const cancelSprint = useMutation({
+    mutationFn: () => apiSend(`/api/sprints/${sprintId}/cancel`, "POST"),
+    onSuccess: refresh,
+  });
+  return {
+    createFolder, updateFolder, deleteFolder, createSprint, updateSprint, deleteSprint,
+    addTasks, removeTask, startSprint, completeSprint, cancelSprint,
+  };
 }
 
 // ----------------------------------------------------------------------------
@@ -277,11 +432,26 @@ export function useBulk(listId: string | undefined) {
   return useMutation({
     mutationFn: (input: {
       ids: string[];
-      patch?: { statusId?: string; priority?: string | null; assigneeIds?: string[] };
+      patch?: { statusId?: string; priority?: string | null; assigneeIds?: string[]; sprintPoints?: number | null };
       delete?: boolean;
     }) => apiSend("/api/tasks/bulk", "POST", input),
     onSettled: () => {
       if (listId) qc.invalidateQueries({ queryKey: ["list", listId] });
+    },
+  });
+}
+
+export function useBulkSprint(listId: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sprintId, taskIds }: { sprintId: string; taskIds: string[] }) =>
+      apiSend(`/api/sprints/${sprintId}/tasks`, "POST", { taskIds, replaceExisting: true }),
+    onSettled: () => {
+      if (listId) qc.invalidateQueries({ queryKey: ["list", listId] });
+      qc.invalidateQueries({ queryKey: ["task"] });
+      qc.invalidateQueries({ queryKey: ["sprint"] });
+      qc.invalidateQueries({ queryKey: ["sprint-folder"] });
+      qc.invalidateQueries({ queryKey: ["sprint-backlog"] });
     },
   });
 }
@@ -334,4 +504,286 @@ function applyOptimistic(task: TaskWithRelations, patch: TaskPatch): TaskWithRel
     startDate: patch.startDate !== undefined ? (patch.startDate ? new Date(patch.startDate) : null) : task.startDate,
     dueDate: patch.dueDate !== undefined ? (patch.dueDate ? new Date(patch.dueDate) : null) : task.dueDate,
   };
+}
+
+// ----------------------------------------------------------------------------
+// Docs & Doc Pages
+// ----------------------------------------------------------------------------
+
+export function useDocs(spaceId?: string) {
+  return useQuery({
+    queryKey: ["docs", { spaceId }],
+    queryFn: () =>
+      apiGet<DocItem[]>(spaceId ? `/api/docs?spaceId=${spaceId}` : "/api/docs"),
+  });
+}
+
+export function useDoc(docId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["doc", docId],
+    queryFn: () => apiGet<DocDetail>(`/api/docs/${docId}`),
+    enabled: !!docId,
+  });
+}
+
+export function useDocPage(
+  docId: string | null | undefined,
+  pageId: string | null | undefined,
+) {
+  return useQuery({
+    queryKey: ["doc-page", docId, pageId],
+    queryFn: () => apiGet<DocPageItem>(`/api/docs/${docId}/pages/${pageId}`),
+    enabled: !!docId && !!pageId,
+  });
+}
+
+export function useCreateDoc() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: CreateDocPayload = {}) =>
+      apiSend<DocDetail>("/api/docs", "POST", payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["docs"] });
+    },
+  });
+}
+
+export function useUpdateDoc(docId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      args: { docId: string; patch: UpdateDocPayload } | UpdateDocPayload,
+    ) => {
+      const targetDocId =
+        "docId" in args && typeof args.docId === "string" ? args.docId : docId;
+      if (!targetDocId) {
+        throw new Error("docId is required to update doc");
+      }
+      const patch =
+        "patch" in args && args.patch !== undefined
+          ? args.patch
+          : (args as UpdateDocPayload);
+      return apiSend<DocItem>(`/api/docs/${targetDocId}`, "PATCH", patch);
+    },
+    onSuccess: (_data, variables) => {
+      const targetDocId =
+        typeof variables === "object" &&
+        variables &&
+        "docId" in variables &&
+        typeof variables.docId === "string"
+          ? variables.docId
+          : docId;
+      qc.invalidateQueries({ queryKey: ["docs"] });
+      if (targetDocId) {
+        qc.invalidateQueries({ queryKey: ["doc", targetDocId] });
+      }
+    },
+  });
+}
+
+export function useDeleteDoc(docId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (docIdArg?: string) => {
+      const targetDocId = docIdArg || docId;
+      if (!targetDocId) {
+        throw new Error("docId is required to delete doc");
+      }
+      return apiSend<{ ok: boolean }>(`/api/docs/${targetDocId}`, "DELETE");
+    },
+    onSuccess: (_data, variables) => {
+      const targetDocId = variables || docId;
+      qc.invalidateQueries({ queryKey: ["docs"] });
+      if (targetDocId) {
+        qc.invalidateQueries({ queryKey: ["doc", targetDocId] });
+      }
+    },
+  });
+}
+
+export function useCreateDocPage(docId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      input:
+        | { docId?: string; payload?: CreateDocPagePayload }
+        | CreateDocPagePayload = {},
+    ) => {
+      const targetDocId =
+        "docId" in input && typeof input.docId === "string"
+          ? input.docId
+          : docId;
+      if (!targetDocId) {
+        throw new Error("docId is required to create doc page");
+      }
+      const payload =
+        "payload" in input && input.payload !== undefined
+          ? input.payload
+          : "docId" in input
+            ? {}
+            : (input as CreateDocPagePayload);
+      return apiSend<DocPageItem>(
+        `/api/docs/${targetDocId}/pages`,
+        "POST",
+        payload,
+      );
+    },
+    onSuccess: (_data, variables) => {
+      const targetDocId =
+        typeof variables === "object" &&
+        variables &&
+        "docId" in variables &&
+        typeof variables.docId === "string"
+          ? variables.docId
+          : docId;
+      if (targetDocId) {
+        qc.invalidateQueries({ queryKey: ["doc", targetDocId] });
+      }
+    },
+  });
+}
+
+export function useUpdateDocPage(docId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      pageId,
+      patch,
+      docId: inlineDocId,
+    }: {
+      pageId: string;
+      patch: UpdateDocPagePayload;
+      docId?: string;
+    }) => {
+      const targetDocId = inlineDocId || docId;
+      if (!targetDocId) {
+        throw new Error("docId is required to update doc page");
+      }
+      return apiSend<DocPageItem>(
+        `/api/docs/${targetDocId}/pages/${pageId}`,
+        "PATCH",
+        patch,
+      );
+    },
+    onSuccess: (_data, vars) => {
+      const targetDocId = vars.docId || docId;
+      if (targetDocId) {
+        qc.invalidateQueries({ queryKey: ["doc", targetDocId] });
+        qc.invalidateQueries({
+          queryKey: ["doc-page", targetDocId, vars.pageId],
+        });
+      }
+    },
+  });
+}
+
+export function useDeleteDocPage(docId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (
+      input: string | { docId?: string; pageId: string },
+    ) => {
+      const pageId = typeof input === "string" ? input : input.pageId;
+      const targetDocId =
+        typeof input === "object" && input.docId ? input.docId : docId;
+      if (!targetDocId) {
+        throw new Error("docId is required to delete doc page");
+      }
+      return apiSend<{ ok: boolean }>(
+        `/api/docs/${targetDocId}/pages/${pageId}`,
+        "DELETE",
+      );
+    },
+    onSuccess: (_data, input) => {
+      const targetDocId =
+        typeof input === "object" && input.docId ? input.docId : docId;
+      const pageId = typeof input === "string" ? input : input.pageId;
+      if (targetDocId) {
+        qc.invalidateQueries({ queryKey: ["doc", targetDocId] });
+        qc.invalidateQueries({ queryKey: ["doc-page", targetDocId, pageId] });
+      }
+    },
+  });
+}
+
+export function usePublishDocPage(docId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ pageId, docId: inlineDocId }: { pageId: string; docId?: string }) => {
+      const targetDocId = inlineDocId || docId;
+      if (!targetDocId) throw new Error("docId is required to publish doc page");
+      return apiSend<DocPageItem>(`/api/docs/${targetDocId}/pages/${pageId}/publish`, "POST");
+    },
+    onSuccess: (_data, vars) => {
+      const targetDocId = vars.docId || docId;
+      if (targetDocId) {
+        qc.invalidateQueries({ queryKey: ["doc", targetDocId] });
+        qc.invalidateQueries({ queryKey: ["doc-page", targetDocId, vars.pageId] });
+      }
+    },
+  });
+}
+
+export function useDiscardDocDraft(docId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ pageId, docId: inlineDocId }: { pageId: string; docId?: string }) => {
+      const targetDocId = inlineDocId || docId;
+      if (!targetDocId) throw new Error("docId is required to discard doc page draft");
+      return apiSend<DocPageItem>(`/api/docs/${targetDocId}/pages/${pageId}/discard-draft`, "POST");
+    },
+    onSuccess: (_data, vars) => {
+      const targetDocId = vars.docId || docId;
+      if (targetDocId) {
+        qc.invalidateQueries({ queryKey: ["doc", targetDocId] });
+        qc.invalidateQueries({ queryKey: ["doc-page", targetDocId, vars.pageId] });
+      }
+    },
+  });
+}
+
+export function useDocComments(docId: string | null | undefined, pageId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["doc-comments", docId, pageId],
+    queryFn: () => apiGet<DocCommentItem[]>(`/api/docs/${docId}/pages/${pageId}/comments`),
+    enabled: !!docId && !!pageId,
+  });
+}
+
+export function useCreateDocComment(docId?: string, pageId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { docId?: string; pageId?: string; payload: CreateDocCommentPayload }) => {
+      const targetDocId = vars.docId || docId;
+      const targetPageId = vars.pageId || pageId;
+      if (!targetDocId || !targetPageId) throw new Error("docId and pageId are required to create comment");
+      return apiSend<DocCommentItem>(`/api/docs/${targetDocId}/pages/${targetPageId}/comments`, "POST", vars.payload);
+    },
+    onSuccess: (_data, vars) => {
+      const targetDocId = vars.docId || docId;
+      const targetPageId = vars.pageId || pageId;
+      if (targetDocId && targetPageId) {
+        qc.invalidateQueries({ queryKey: ["doc-comments", targetDocId, targetPageId] });
+      }
+    },
+  });
+}
+
+export function useDeleteDocComment(docId?: string, pageId?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { docId?: string; pageId?: string; commentId: string }) => {
+      const targetDocId = vars.docId || docId;
+      const targetPageId = vars.pageId || pageId;
+      if (!targetDocId || !targetPageId) throw new Error("docId and pageId are required to delete comment");
+      return apiSend<{ ok: boolean }>(`/api/docs/${targetDocId}/pages/${targetPageId}/comments/${vars.commentId}`, "DELETE");
+    },
+    onSuccess: (_data, vars) => {
+      const targetDocId = vars.docId || docId;
+      const targetPageId = vars.pageId || pageId;
+      if (targetDocId && targetPageId) {
+        qc.invalidateQueries({ queryKey: ["doc-comments", targetDocId, targetPageId] });
+      }
+    },
+  });
 }

@@ -29,7 +29,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } 
 import { CSS } from "@dnd-kit/utilities";
 import { cn, midpoint } from "@/lib/utils";
 import type { ListData, TaskWithRelations, StatusModel, CustomFieldWithOptions } from "@/lib/queries";
-import { useUpdateTask, useCreateTask, useSetFieldValue, useDeleteTask, useDuplicateTask, useBulk } from "@/lib/hooks";
+import { useUpdateTask, useCreateTask, useSetFieldValue, useDeleteTask, useDuplicateTask, useBulk, useBulkSprint } from "@/lib/hooks";
 import { useWorkspace } from "@/components/workspace-context";
 import { groupTasks, type TaskGroup } from "@/lib/grouping";
 import type { GroupBy } from "@/lib/view-state";
@@ -61,6 +61,7 @@ export function ListView({
   const members = useMemo(() => workspace.members.map((m) => m.user), [workspace.members]);
   const update = useUpdateTask(list.id);
   const bulk = useBulk(list.id);
+  const bulkSprint = useBulkSprint(list.id);
   const [addingField, setAddingField] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -196,6 +197,8 @@ export function ListView({
           onSetStatus={(statusId) => bulk.mutate({ ids: [...selected], patch: { statusId } })}
           onSetPriority={(priority) => bulk.mutate({ ids: [...selected], patch: { priority } })}
           onSetAssignees={(assigneeIds) => bulk.mutate({ ids: [...selected], patch: { assigneeIds } })}
+          onSetPoints={(sprintPoints) => bulk.mutate({ ids: [...selected], patch: { sprintPoints } })}
+          onAddSprint={(sprintId) => bulkSprint.mutate({ sprintId, taskIds: [...selected] })}
           onDelete={() => { bulk.mutate({ ids: [...selected], delete: true }); clearSelect(); }}
           onClear={clearSelect}
         />
@@ -530,7 +533,7 @@ function TaskRow({
         <div className="flex justify-center py-2" onClick={(e) => e.stopPropagation()}>
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
-              <button className="hidden rounded p-1 text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-text group-hover:block">
+              <button className="rounded p-1 text-cu-text-tertiary opacity-0 hover:bg-cu-hover hover:text-cu-text group-hover:opacity-100 data-[state=open]:opacity-100 data-[state=open]:bg-cu-hover">
                 <Ellipsis className="h-4 w-4" />
               </button>
             </DropdownMenu.Trigger>

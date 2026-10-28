@@ -110,12 +110,12 @@ export function Attachments({
 }
 
 function AttachmentCard({ attachment, onDelete }: { attachment: Attachment; onDelete: () => void }) {
-  const isImage = attachment.mime.startsWith("image/");
+  const isImage = attachment.mimeType.startsWith("image/");
   return (
     <div className="group relative flex items-center gap-2 overflow-hidden rounded-lg border border-cu-border bg-cu-panel p-2">
       {isImage ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={attachment.url} alt={attachment.name} className="h-10 w-10 shrink-0 rounded object-cover" />
+        <img src={attachment.url} alt={attachment.fileName} className="h-10 w-10 shrink-0 rounded object-cover" />
       ) : (
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-cu-hover-strong">
           <FileText className="h-5 w-5 text-cu-text-tertiary" />
@@ -127,16 +127,16 @@ function AttachmentCard({ attachment, onDelete }: { attachment: Attachment; onDe
           target="_blank"
           rel="noopener noreferrer"
           className="block truncate text-[12px] font-medium text-cu-text hover:text-cu-purple"
-          title={attachment.name}
+          title={attachment.fileName}
         >
-          {attachment.name}
+          {attachment.fileName}
         </a>
-        <span className="text-[11px] text-cu-text-tertiary">{formatSize(attachment.size)}</span>
+        <span className="text-[11px] text-cu-text-tertiary">{formatSize(attachment.fileSize)}</span>
       </div>
       <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
         <a
           href={attachment.url}
-          download={attachment.name}
+          download={attachment.fileName}
           className="rounded p-1 text-cu-text-tertiary hover:bg-cu-hover hover:text-cu-text"
           title="Download"
         >

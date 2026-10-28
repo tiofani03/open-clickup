@@ -50,7 +50,7 @@ RETURNING id, "workspaceId", name, color, icon, private, "position", "createdAt"
 DELETE FROM "Space" WHERE id = $1;
 
 -- name: ListFoldersBySpace :many
-SELECT id, "spaceId", name, "position", collapsed, "createdAt"
+SELECT id, "spaceId", name, kind, "position", collapsed, "createdAt"
 FROM "Folder"
 WHERE "spaceId" = $1
 ORDER BY "position" ASC;
@@ -58,13 +58,13 @@ ORDER BY "position" ASC;
 -- name: CreateFolder :one
 INSERT INTO "Folder" (id, "spaceId", name, "position", collapsed)
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, "spaceId", name, "position", collapsed, "createdAt";
+RETURNING id, "spaceId", name, kind, "position", collapsed, "createdAt";
 
 -- name: UpdateFolder :one
 UPDATE "Folder"
 SET name = COALESCE($2, name)
 WHERE id = $1
-RETURNING id, "spaceId", name, "position", collapsed, "createdAt";
+RETURNING id, "spaceId", name, kind, "position", collapsed, "createdAt";
 
 -- name: DeleteFolder :exec
 DELETE FROM "Folder" WHERE id = $1;

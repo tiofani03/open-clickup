@@ -5,9 +5,9 @@
 ```bash
 docker compose up -d        # Postgres on :5544
 pnpm install
-pnpm prisma migrate deploy  # or `pnpm db:reset` for a clean seeded DB
-pnpm db:seed                # sample workspace "Acme Inc.", 5 users, tasks…
-pnpm dev                    # http://localhost:3000
+(cd server-go && go run ./cmd/migrate)
+(cd server-go && go run ./cmd/seed) # sample workspace "Acme Inc.", 5 users, tasks…
+pnpm dev:all                # Vite :3000 + Go Fiber :8080
 ```
 
 Demo login: `santiago@clickuppp.dev` / `password` (all seeded users use
@@ -29,21 +29,23 @@ hoc.
 
 Most features touch the whole stack in this order:
 
-1. **Schema** — edit `prisma/schema.prisma`; then
-   `pnpm prisma migrate dev --name <x>` → `pnpm prisma generate` →
-   **restart `pnpm dev`** (stale client otherwise 500s).
+1. **Schema** — add paired SQL migrations under `server-go/db/migrations/`,
+   update `server-go/db/schema.sql`, update queries under
+   `server-go/db/queries/`, then run `sqlc generate` and restart the Go server.
 2. **Query shape / types** — add include-shapes + payload types in
    `lib/queries.ts` (single source of truth for API↔client).
-3. **Service** — business logic in `lib/tasks.ts` / `lib/hierarchy.ts`; emit
-   activity-log entries and `publish()` SSE events here.
-4. **Route** — `app/api/**/route.ts`; wrap with `route()`, validate with
-   `readJson(req, zodSchema)`, and gate with `requireRole(...)`.
+3. **Service** — transactional business logic in `server-go/internal/service/`;
+   emit history records for state that reports must preserve.
+4. **Route** — Fiber handlers in `server-go/internal/handlers/` and route wiring
+   in `server-go/cmd/server/main.go`; require authentication and resource-scoped
+   role checks for every mutation.
 5. **Hook** — a TanStack Query hook in `lib/hooks.ts` (`apiGet`/`apiSend`),
    optimistic if it helps.
 6. **UI** — components under `components/**`, using `--cu-*` tokens and existing
    primitives/menus.
 7. **Test** — unit test for pure logic; integration test for core mutations.
-8. **Verify** — `npx tsc --noEmit`, run tests, and exercise it (curl + browser).
+8. **Verify** — `pnpm exec tsc --noEmit`, `pnpm test`, `go test ./...`, build,
+   and exercise it with curl plus Playwright/browser.
 9. **Commit & push**, then **check CI** (`gh run list`).
 
 ## Verifying like we do

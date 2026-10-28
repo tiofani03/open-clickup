@@ -61,10 +61,10 @@ export function StatusManager({
   return (
     <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[1px]" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="fixed left-1/2 top-1/2 z-50 w-[min(520px,92vw)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-cu-border bg-cu-panel shadow-2xl outline-none"
+          className="fixed inset-0 z-50 m-auto h-fit max-h-[85vh] w-[min(520px,92vw)] rounded-xl border border-cu-border bg-cu-panel shadow-2xl outline-none"
         >
           <div className="flex items-center justify-between border-b border-cu-border px-4 py-3">
             <Dialog.Title className="text-sm font-semibold">Statuses</Dialog.Title>

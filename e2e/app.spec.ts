@@ -52,3 +52,17 @@ test("opens the Home / My Work view after login", async ({ page }) => {
   await expect(page).toHaveURL(/\/home/);
   await expect(page.getByRole("heading", { name: /Good (morning|afternoon|evening)/ })).toBeVisible();
 });
+
+test("opens an active Sprint with task progress and reports", async ({ page }) => {
+  await login(page);
+  await page.locator("aside").getByText("Engineering Sprints", { exact: true }).click();
+  await page.waitForURL(/\/sf\//);
+  await expect(page.getByRole("heading", { name: "Engineering Sprints" })).toBeVisible();
+  await page.getByText("Sprint 24", { exact: true }).first().click();
+  await page.waitForURL(/\/s\//);
+  await expect(page.getByRole("heading", { name: "Sprint 24" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Complete Sprint" })).toBeVisible();
+  await expect(page.getByText("Sprint tasks", { exact: true })).toBeVisible();
+  await expect(page.getByText("Sprint report", { exact: true })).toBeVisible();
+  await expect(page.getByText("Burndown", { exact: true })).toBeVisible();
+});

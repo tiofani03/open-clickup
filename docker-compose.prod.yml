@@ -31,6 +31,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - clickuppp-uploads:/app/data/uploads
     ports:
       - "3000:3000"
     healthcheck:
@@ -42,3 +44,5 @@ services:
 
 volumes:
   clickuppp-prod-data:
+  clickuppp-uploads:
+
